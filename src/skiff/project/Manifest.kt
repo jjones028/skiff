@@ -18,20 +18,36 @@ data class Manifest(
     val kotlinVersion: String,
     val jvmTarget: String,
     val dependencies: Map<ModuleId, String>,
+    /** Only on the classpath of `test/`; see [testDependencies]. */
+    val devDependencies: Map<ModuleId, String>,
     val repositories: List<Repository>,
 ) {
     val file: Path get() = dir.resolve(FILE_NAME)
     val lockFile: Path get() = dir.resolve(Lockfile.FILE_NAME)
     val sourceDir: Path get() = dir.resolve("src")
     val resourceDir: Path get() = dir.resolve("resources")
+    val testDir: Path get() = dir.resolve("test")
     val targetDir: Path get() = dir.resolve("target")
+
+    /** True if `test/` holds Kotlin sources. Only then are the test runner's own libraries resolved. */
+    val hasTests: Boolean
+        get() = Files.isDirectory(testDir) && Files.walk(testDir).use { paths -> paths.anyMatch { it.toString().endsWith(".kt") } }
 
     /** Everything the project compiles against: its dependencies plus the Kotlin standard library. */
     fun allDependencies(): Map<ModuleId, String> = mapOf(KOTLIN_STDLIB to kotlinVersion) + dependencies
 
+    /** The roots of the test classpath: everything in [allDependencies], the dev-dependencies and the test runner. */
+    fun testDependencies(): Map<ModuleId, String> = allDependencies() + devDependencies + testRunnerDependencies()
+
+    /** Roots that exist only for testing, locked next to the real dependencies but kept off the build classpath. */
+    private fun testRunnerDependencies(): Map<ModuleId, String> =
+        if (!hasTests) emptyMap()
+        else mapOf(KOTLIN_TEST_JUNIT5 to kotlinVersion, JUNIT_ENGINE to JUNIT_JUPITER_VERSION, JUNIT_CONSOLE to JUNIT_PLATFORM_VERSION)
+
     /** Changes whenever anything that affects resolution changes, so a stale lockfile can be detected. */
     fun resolutionFingerprint(): String = Hashing.sha256(buildString {
         allDependencies().toSortedMap().forEach { (module, version) -> append("$module=$version\n") }
+        testDependencies().filter { (module, version) -> allDependencies()[module] != version }.toSortedMap().forEach { (module, version) -> append("dev:$module=$version\n") }
         repositories.forEach { append("repository=${it.url}\n") }
     })
 
@@ -39,7 +55,12 @@ data class Manifest(
         const val FILE_NAME = "Skiff.toml"
         const val DEFAULT_KOTLIN_VERSION = "2.4.21"
         const val DEFAULT_JVM_TARGET = "21"
+        const val JUNIT_JUPITER_VERSION = "5.11.4"
+        const val JUNIT_PLATFORM_VERSION = "1.11.4"
         val KOTLIN_STDLIB = ModuleId("org.jetbrains.kotlin", "kotlin-stdlib")
+        private val KOTLIN_TEST_JUNIT5 = ModuleId("org.jetbrains.kotlin", "kotlin-test-junit5")
+        private val JUNIT_ENGINE = ModuleId("org.junit.jupiter", "junit-jupiter-engine")
+        private val JUNIT_CONSOLE = ModuleId("org.junit.platform", "junit-platform-console")
         private val NAME = Regex("[A-Za-z0-9_-]+")
 
         /** Loads the manifest of the project containing [start], searching parent directories like Cargo does. */
@@ -62,14 +83,8 @@ data class Manifest(
             if (!NAME.matches(name)) {
                 throw SkiffException("$FILE_NAME: package.name '$name' may only contain letters, digits, '-' and '_'")
             }
-            val dependencies = toml.table("dependencies").orEmpty().entries.associate { (key, value) ->
-                val version = when (value) {
-                    is String -> value
-                    is Map<*, *> -> value["version"] as? String
-                    else -> null
-                } ?: throw SkiffException("$FILE_NAME: dependency '$key' needs a version string")
-                ModuleId.parse(key) to version
-            }
+            val dependencies = dependencyTable(toml, "dependencies")
+            val devDependencies = dependencyTable(toml, "dev-dependencies")
             val extraRepositories = toml.table("repositories").orEmpty().map { (key, value) ->
                 Repository(key, value as? String ?: throw SkiffException("$FILE_NAME: repository '$key' needs a URL"))
             }
@@ -81,9 +96,20 @@ data class Manifest(
                 kotlinVersion = kotlin.string("version", "kotlin") ?: DEFAULT_KOTLIN_VERSION,
                 jvmTarget = kotlin.string("jvm-target", "kotlin") ?: DEFAULT_JVM_TARGET,
                 dependencies = dependencies,
+                devDependencies = devDependencies,
                 repositories = listOf(Repository.MAVEN_CENTRAL) + extraRepositories,
             )
         }
+
+        private fun dependencyTable(toml: Map<String, Any?>, name: String): Map<ModuleId, String> =
+            toml.table(name).orEmpty().entries.associate { (key, value) ->
+                val version = when (value) {
+                    is String -> value
+                    is Map<*, *> -> value["version"] as? String
+                    else -> null
+                } ?: throw SkiffException("$FILE_NAME: dependency '$key' needs a version string")
+                ModuleId.parse(key) to version
+            }
 
         @Suppress("UNCHECKED_CAST")
         private fun Map<String, Any?>.table(key: String): Map<String, Any?>? = when (val value = this[key]) {
