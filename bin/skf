@@ -1,0 +1,5 @@
+#!/bin/sh
+DIR="$(cd "$(dirname "$0")" && pwd)"
+JAVA="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+# shellcheck disable=SC2086
+exec "$JAVA" -XX:TieredStopAtLevel=1 -XX:+UseSerialGC $SKIFF_JAVA_OPTS -jar "$DIR/skiff.jar" "$@"
