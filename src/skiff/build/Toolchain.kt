@@ -5,6 +5,7 @@ import skiff.cli.Term
 import skiff.maven.ArtifactStore
 import skiff.maven.DependencyResolver
 import skiff.maven.ModuleId
+import skiff.project.KotlinPlugin
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -22,6 +23,13 @@ class Toolchain(private val store: ArtifactStore) {
         Files.createDirectories(cacheFile.parent)
         Files.write(cacheFile, jars.map { it.toString() })
         return jars
+    }
+
+    /** The jars of the enabled compiler [plugins] for [kotlinVersion], downloaded into the shared cache on first use. */
+    fun pluginJars(kotlinVersion: String, plugins: List<KotlinPlugin>): List<Path> {
+        if (plugins.isEmpty()) return emptyList()
+        val paths = plugins.map { it.module.filePath(kotlinVersion, "jar") }
+        return store.getAll(paths).let { jars -> paths.map(jars::getValue) }
     }
 
     companion object {

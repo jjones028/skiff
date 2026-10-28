@@ -18,10 +18,25 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
      * @param locked fail instead of changing the lockfile (`--locked`, for CI).
      * @param tests include the dev-dependencies and the test runner; otherwise only what the project itself needs.
      */
-    fun install(update: Boolean = false, locked: Boolean = false, tests: Boolean = false): List<Path> {
+    fun install(update: Boolean = false, locked: Boolean = false, tests: Boolean = false): List<Path> =
+        jars(lock(update, locked), if (tests) manifest.testDependencies().keys else manifest.allDependencies().keys)
+
+    /**
+     * Returns the jars for the `[[kotlin.compiler-plugin]]` entries and their dependencies. The Kotlin standard
+     * library and compiler are left out, since the compiler already provides them.
+     */
+    fun pluginClasspath(locked: Boolean = false): List<Path> {
+        if (manifest.externalPlugins.isEmpty()) return emptyList()
+        val lock = lock(update = false, locked = locked)
+        val provided = lock.packages.filter { it.module.group == "org.jetbrains.kotlin" && it.module.artifact in COMPILER_PROVIDED }
+        val needed = reachable(lock, manifest.pluginDependencies().keys) - provided.map { it.module }.toSet()
+        return jars(lock, needed)
+    }
+
+    private fun lock(update: Boolean, locked: Boolean): Lockfile {
         val existing = Lockfile.read(manifest.lockFile)
         val fingerprint = manifest.resolutionFingerprint()
-        val lock = if (!update && existing != null && existing.fingerprint == fingerprint) {
+        return if (!update && existing != null && existing.fingerprint == fingerprint) {
             existing
         } else {
             if (locked) {
@@ -32,8 +47,10 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
             }
             resolve(fingerprint, existing)
         }
+    }
 
-        val needed = reachable(lock, if (tests) manifest.testDependencies().keys else manifest.allDependencies().keys)
+    private fun jars(lock: Lockfile, roots: Collection<ModuleId>): List<Path> {
+        val needed = reachable(lock, roots)
         val packages = lock.packages.filter { it.module in needed }
         val jars = store.getAll(packages.filter { it.sha256 != null }.map { it.jarPath })
         return packages.mapNotNull { pkg ->
@@ -63,7 +80,7 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
 
     private fun resolve(fingerprint: String, previous: Lockfile?): Lockfile {
         Term.status("Resolving", "dependencies")
-        val resolved = DependencyResolver(store).resolve(manifest.testDependencies())
+        val resolved = DependencyResolver(store).resolve(manifest.lockRoots())
         val jars = store.getAll(resolved.filter { it.hasJar }.map { it.jarPath })
         val packages = resolved.map { module ->
             LockedPackage(
@@ -93,5 +110,9 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
         for (pkg in before) {
             if (pkg.module !in new) Term.status("Removing", "${pkg.module} v${pkg.version}")
         }
+    }
+
+    private companion object {
+        val COMPILER_PROVIDED = setOf("kotlin-stdlib", "kotlin-compiler-embeddable")
     }
 }

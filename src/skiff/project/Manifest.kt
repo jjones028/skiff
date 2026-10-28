@@ -21,6 +21,8 @@ data class Manifest(
     /** Only on the classpath of `test/`; see [testDependencies]. */
     val devDependencies: Map<ModuleId, String>,
     val repositories: List<Repository>,
+    val plugins: List<PluginConfig> = emptyList(),
+    val externalPlugins: List<ExternalPlugin> = emptyList(),
 ) {
     val file: Path get() = dir.resolve(FILE_NAME)
     val lockFile: Path get() = dir.resolve(Lockfile.FILE_NAME)
@@ -39,6 +41,12 @@ data class Manifest(
     /** The roots of the test classpath: everything in [allDependencies], the dev-dependencies and the test runner. */
     fun testDependencies(): Map<ModuleId, String> = allDependencies() + devDependencies + testRunnerDependencies()
 
+    /** The `[[kotlin.compiler-plugin]]` artifacts; their jars go on the compiler's plugin classpath only. */
+    fun pluginDependencies(): Map<ModuleId, String> = externalPlugins.associate { it.module to it.version }
+
+    /** Every root that `Skiff.lock` covers. */
+    fun lockRoots(): Map<ModuleId, String> = testDependencies() + pluginDependencies()
+
     /** Roots that exist only for testing, locked next to the real dependencies but kept off the build classpath. */
     private fun testRunnerDependencies(): Map<ModuleId, String> =
         if (!hasTests) emptyMap()
@@ -47,7 +55,7 @@ data class Manifest(
     /** Changes whenever anything that affects resolution changes, so a stale lockfile can be detected. */
     fun resolutionFingerprint(): String = Hashing.sha256(buildString {
         allDependencies().toSortedMap().forEach { (module, version) -> append("$module=$version\n") }
-        testDependencies().filter { (module, version) -> allDependencies()[module] != version }.toSortedMap().forEach { (module, version) -> append("dev:$module=$version\n") }
+        lockRoots().filter { (module, version) -> allDependencies()[module] != version }.toSortedMap().forEach { (module, version) -> append("dev:$module=$version\n") }
         repositories.forEach { append("repository=${it.url}\n") }
     })
 
@@ -98,7 +106,68 @@ data class Manifest(
                 dependencies = dependencies,
                 devDependencies = devDependencies,
                 repositories = listOf(Repository.MAVEN_CENTRAL) + extraRepositories,
+                plugins = plugins(kotlin),
+                externalPlugins = externalPlugins(kotlin),
             )
+        }
+
+        /** Reads the `[[kotlin.compiler-plugin]]` entries: `dependency = "group:artifact:version"` and optional `options`. */
+        private fun externalPlugins(kotlin: Map<String, Any?>): List<ExternalPlugin> {
+            val entries = when (val value = kotlin["compiler-plugin"]) {
+                null -> return emptyList()
+                is List<*> -> value
+                else -> throw SkiffException("$FILE_NAME: kotlin.compiler-plugin must be an array of tables ([[kotlin.compiler-plugin]])")
+            }
+            return entries.map { entry ->
+                @Suppress("UNCHECKED_CAST")
+                val table = entry as? Map<String, Any?> ?: throw SkiffException("$FILE_NAME: kotlin.compiler-plugin must be an array of tables")
+                val unknown = table.keys - setOf("dependency", "options")
+                if (unknown.isNotEmpty()) throw SkiffException("$FILE_NAME: unknown option '${unknown.first()}' in [[kotlin.compiler-plugin]]")
+                val dependency = table["dependency"] as? String
+                    ?: throw SkiffException("$FILE_NAME: [[kotlin.compiler-plugin]] needs dependency = \"group:artifact:version\"")
+                val parts = dependency.split(':')
+                if (parts.size != 3 || parts.any { it.isBlank() }) {
+                    throw SkiffException("$FILE_NAME: compiler plugin '$dependency' must look like group:artifact:version")
+                }
+                val options = when (val value = table["options"]) {
+                    null -> emptyList()
+                    is List<*> -> value.map { it as? String ?: throw SkiffException("$FILE_NAME: compiler-plugin options must be a list of strings") }
+                    else -> throw SkiffException("$FILE_NAME: compiler-plugin options must be a list of strings")
+                }
+                ExternalPlugin(ModuleId(parts[0], parts[1]), parts[2], options)
+            }
+        }
+
+        /** Reads `plugins = [...]` and the `[kotlin.<plugin>]` option tables of the `[kotlin]` table. */
+        private fun plugins(kotlin: Map<String, Any?>): List<PluginConfig> {
+            val names = when (val value = kotlin["plugins"]) {
+                null -> emptyList()
+                is List<*> -> value.map { it as? String ?: throw SkiffException("$FILE_NAME: kotlin.plugins must be a list of strings") }
+                else -> throw SkiffException("$FILE_NAME: kotlin.plugins must be a list of strings")
+            }
+            val plugins = names.distinct().map { name ->
+                val plugin = KotlinPlugin.byId(name) ?: throw SkiffException(
+                    "$FILE_NAME: unknown compiler plugin '$name' (supported: ${KotlinPlugin.entries.joinToString { it.id }})",
+                )
+                val options = kotlin.table(name).orEmpty()
+                val unknown = options.keys - if (plugin.takesAnnotations) setOf("annotations") else emptySet()
+                if (unknown.isNotEmpty()) throw SkiffException("$FILE_NAME: unknown option '${unknown.first()}' in [kotlin.$name]")
+                val annotations = when (val value = options["annotations"]) {
+                    null -> emptyList()
+                    is List<*> -> value.map { it as? String ?: throw SkiffException("$FILE_NAME: kotlin.$name.annotations must be a list of strings") }
+                    else -> throw SkiffException("$FILE_NAME: kotlin.$name.annotations must be a list of strings")
+                }
+                if (plugin.takesAnnotations && annotations.isEmpty()) {
+                    throw SkiffException("$FILE_NAME: the '$name' plugin needs `annotations = [...]` under [kotlin.$name]")
+                }
+                PluginConfig(plugin, annotations)
+            }
+            for (key in kotlin.keys) {
+                if (KotlinPlugin.byId(key) != null && plugins.none { it.plugin.id == key }) {
+                    throw SkiffException("$FILE_NAME: [kotlin.$key] is configured but '$key' is not listed in kotlin.plugins")
+                }
+            }
+            return plugins
         }
 
         private fun dependencyTable(toml: Map<String, Any?>, name: String): Map<ModuleId, String> =

@@ -30,6 +30,10 @@ main = "com.example.MainKt"   # optional; detected from `fun main` (prefers Main
 [kotlin]
 version = "2.4.21"            # skiff downloads this compiler version
 jvm-target = "21"
+plugins = ["serialization", "allopen"]   # optional compiler plugins, see below
+
+[kotlin.allopen]              # allopen, noarg and sam-with-receiver need annotations
+annotations = ["com.example.Open"]
 
 [dependencies]
 "com.squareup.okhttp3:okhttp" = "4.12.0"
@@ -41,6 +45,27 @@ internal = "https://nexus.example.com/repository/maven-public"
 [dev-dependencies]            # optional; only on the classpath of test/
 "org.mockito:mockito-core" = "5.14.2"
 ```
+
+### Compiler plugins
+
+`[kotlin] plugins` enables Kotlin compiler plugins; skiff downloads the plugin jar that matches `[kotlin].version`.
+Supported: `serialization`, `allopen`, `noarg`, `sam-with-receiver` and `compose`. The last three do nothing until you name the
+annotations they act on in `[kotlin.<plugin>] annotations = [...]`. `serialization` and `compose` also need their
+runtime libraries in `[dependencies]` (for example `"org.jetbrains.kotlinx:kotlinx-serialization-json"`, or
+`"org.jetbrains.compose.runtime:runtime"`, which needs `google = "https://maven.google.com"` under `[repositories]`).
+Plugins apply to `src/` and `test/`. IntelliJ does not read them from the files `skf idea` writes, so the IDE may
+underline generated code.
+
+Any other plugin can be added by its Maven coordinates, with raw compiler options passed through as `-P`:
+
+```toml
+[[kotlin.compiler-plugin]]
+dependency = "dev.example:my-compiler-plugin:1.2.3"
+options = ["plugin:dev.example.my:flag=true"]
+```
+
+These jars (and their dependencies, minus the Kotlin standard library and compiler) go on the compiler's plugin
+classpath only. They are recorded in `Skiff.lock` but never end up in your program's classpath or fat jar.
 
 ## Commands
 
