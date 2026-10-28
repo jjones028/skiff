@@ -23,19 +23,13 @@ simple projects. User-facing docs are in README.md; this file records design dec
 bin/skf.cmd build --fat               # self-host build -> target/skiff-0.1.0-all.jar
 ```
 
-Unit tests live in `test/` (mirroring the `src/skiff` packages) and run with `bin/skf.cmd test` (about 1 s once compiled).
+Unit tests live in `test/` (mirroring the `src/skiff` packages) and run with `bin/skf.cmd test` (the unit tests take about a second; the whole suite about 40 s because of the CLI tests).
 Add a test alongside any change to the parsers, version logic, manifest editing or POM resolution. `PomResolverTest`
 shows how to resolve fixture POMs from a temp directory with an offline `ArtifactStore`, so tests need no network.
 
-There is no automated end-to-end test yet. The manual check used so far (run in a short temp path;
-`cmd.exe` cannot start in paths longer than about 260 characters):
-
-```powershell
-skf new hello; cd hello
-skf add com.squareup.okhttp3:okhttp@4.12.0 org.jetbrains.kotlinx:kotlinx-coroutines-core
-skf run -- a b; skf run          # second run should print "Fresh"
-skf tree; skf build --fat; skf install --locked; skf run --offline
-```
+`test/skiff/e2e` drives the real CLI in a child JVM (`Skf`): `CliBasicsTest` needs no network, while
+`CliProjectLifecycleTest` runs new/run/add/lock/fat jar/test/idea/remove on a temp project, so the first run needs
+network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project because every compile takes seconds.
 
 ## Architecture (src/skiff)
 
@@ -72,19 +66,17 @@ skf tree; skf build --fat; skf install --locked; skf run --offline
 
 ## Known gaps / roadmap (rough priority)
 
-1. **End-to-end test**: unit tests cover the parsers, versions, manifest/lockfile, resolvers and main-class detection;
-   what is missing is an automated end-to-end test of the CLI (`new`, `add`, `run`, `install --locked`).
-2. **Gradle module metadata constraints**: Gradle-published `dependencyConstraints` (e.g. kotlin-stdlib
+1. **Gradle module metadata constraints**: Gradle-published `dependencyConstraints` (e.g. kotlin-stdlib
    aligning `-jdk7`/`-jdk8`) are ignored, so old `kotlin-stdlib-jdk7/jdk8 1.9.x` jars can show up. Read
    constraints from `.module` and apply them as version floors.
-3. **Compile speed**: each build spawns a new JVM (about 3–9 s). Options: run `K2JVMCompiler` in-process
+2. **Compile speed**: each build spawns a new JVM (about 3–9 s). Options: run `K2JVMCompiler` in-process
    through an isolated `URLClassLoader`, or keep a compiler daemon running between builds. Real
    incremental compilation could come later through `kotlin-build-tools-api`.
-4. **Java sources** in `src/` (run javac via `ToolProvider` after kotlinc).
-5. **Private repositories with auth** (`[repositories]` credentials from env vars or `~/.skiff/config.toml`),
+3. **Java sources** in `src/` (run javac via `ToolProvider` after kotlinc).
+4. **Private repositories with auth** (`[repositories]` credentials from env vars or `~/.skiff/config.toml`),
    and `skf publish` (POM generation, sources/javadoc jars, signing).
-6. **Classifiers and non-jar types** (currently skipped with a warning), and Maven's `<relocation>`.
-7. **Workspaces** (multi-module projects, like Cargo workspaces) and `[scripts]` (like `npm run <script>`).
-8. **Distribution**: `skf self-update`, GraalVM native-image or jlink build, Homebrew/Scoop/winget packages.
-9. Plugins: compiler plugins (`kotlinx-serialization`, `allopen`, `noarg`) via `[kotlin] plugins = [...]`.
+5. **Classifiers and non-jar types** (currently skipped with a warning), and Maven's `<relocation>`.
+6. **Workspaces** (multi-module projects, like Cargo workspaces) and `[scripts]` (like `npm run <script>`).
+7. **Distribution**: `skf self-update`, GraalVM native-image or jlink build, Homebrew/Scoop/winget packages.
+8. Plugins: compiler plugins (`kotlinx-serialization`, `allopen`, `noarg`) via `[kotlin] plugins = [...]`.
    This matters for real-world use, since serialization is common.
