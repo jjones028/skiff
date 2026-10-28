@@ -53,8 +53,8 @@ Supported: `serialization`, `allopen`, `noarg`, `sam-with-receiver` and `compose
 `sam-with-receiver` do nothing until you name the annotations they act on in `[kotlin.<plugin>] annotations = [...]`. `serialization` and `compose` also need their
 runtime libraries in `[dependencies]` (for example `"org.jetbrains.kotlinx:kotlinx-serialization-json"`, or
 `"org.jetbrains.compose.runtime:runtime"`, which needs `google = "https://maven.google.com"` under `[repositories]`).
-Plugins apply to `src/` and `test/`. IntelliJ does not read them from the files `skf idea` writes, so the IDE may
-underline generated code.
+Plugins apply to `src/` and `test/`. `skf idea` passes the plugin jars and options on to IntelliJ, so the editor
+understands what the plugins generate (re-run it after changing `plugins`).
 
 Any other plugin can be added by its Maven coordinates, with raw compiler options passed through as `-P`:
 
@@ -96,7 +96,8 @@ options = { "autoservice.verify" = "true" }
 On `skf build` KSP runs first, then kapt, then the normal compilation sees the generated Kotlin and Java sources.
 Generated Java is compiled with the JDK's `javac` (skiff must run on a JDK), and generated resources, such as
 `META-INF/services` files, are added to the jar. Output is in `target/generated/`. Processing applies to `src/` only,
-runs on every real build, and the IDE files from `skf idea` do not include the generated sources.
+and runs on every real build. `skf idea` marks the output directories as generated source roots, so run `skf build`
+once and the IDE can see (and navigate into) the generated code.
 
 ## Commands
 
@@ -112,7 +113,7 @@ runs on every real build, and the IDE files from `skf idea` do not include the g
 | `skf test [-- args]` | Compile `test/` and run it with JUnit 5 (kotlin-test is included; args go to the JUnit console launcher) |
 | `skf tree` | Dependency tree |
 | `skf classpath` | Print the dependency classpath (for IDEs/scripts) |
-| `skf idea` | Generate IntelliJ IDEA project files (git-ignored; re-run after changing dependencies) |
+| `skf idea` | Generate IntelliJ IDEA project files: sources, libraries, Kotlin language level, compiler plugins and generated sources (git-ignored; re-run after changing dependencies or plugins) |
 | `skf clean` | Delete `target/` |
 
 Global flags: `--locked` (fail if `Skiff.lock` would change, for CI), `--offline` (local cache only).

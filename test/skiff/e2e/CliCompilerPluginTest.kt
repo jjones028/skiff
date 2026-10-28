@@ -62,6 +62,14 @@ class CliCompilerPluginTest {
         val run = app.succeed("run")
         assertEquals(listOf("{\"name\":\"ada\",\"age\":36}", "base final: false"), run.stdout.trim().lines().map { it.trim() })
 
+        // The IDE module knows the plugins: their jars and the allopen option are in the Kotlin facet.
+        app.succeed("idea")
+        val module = Files.readString(project.resolve("app.iml"))
+        assertTrue("kotlin-serialization-compiler-plugin-embeddable-2.4.21.jar" in module, module)
+        assertTrue("kotlin-allopen-compiler-plugin-embeddable-2.4.21.jar" in module, module)
+        assertTrue("plugin:org.jetbrains.kotlin.allopen:annotation=Open" in module, module)
+        assertTrue("name=\"languageVersion\" arg=\"2.4\"" in module, module)
+
         // Tests are compiled with the same plugins.
         Files.createDirectories(project.resolve("test"))
         Files.writeString(

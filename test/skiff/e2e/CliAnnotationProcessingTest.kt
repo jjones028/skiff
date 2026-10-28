@@ -56,6 +56,11 @@ class CliAnnotationProcessingTest {
         val run = app.succeed("run")
         assertEquals("[hi]", run.stdout.trim())
         assertTrue("Processing annotations with kapt" in run.stderr, run.stderr)
+        // The IDE module lists kapt's output directories as generated source roots (and no KSP ones).
+        app.succeed("idea")
+        val module = Files.readString(project.resolve("app.iml"))
+        assertTrue("target/generated/kapt/sources\" isTestSource=\"false\" generated=\"true\"" in module, module)
+        assertFalse("target/generated/ksp" in module, module)
         // The service file the processor wrote ended up in the jar.
         java.util.zip.ZipFile(project.resolve("target/app-0.1.0.jar").toFile()).use { jar ->
             assertTrue(jar.getEntry("META-INF/services/Greeter") != null)
