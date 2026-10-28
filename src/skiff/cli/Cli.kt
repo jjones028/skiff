@@ -165,14 +165,24 @@ class Cli {
 
     private fun idea(): Int {
         val manifest = project()
-        val installer = Installer(manifest, store(manifest))
+        val store = store(manifest)
+        val installer = Installer(manifest, store)
         val runtimeJars = installer.install(locked = locked)
         val testJars = installer.install(locked = locked, tests = true)
-        val written = IdeaProject.generate(manifest, runtimeJars, testJars)
+        val pluginJars = Toolchain(store).pluginJars(manifest.kotlinVersion, manifest.plugins.map { it.plugin }) +
+            installer.pluginClasspath(locked)
+        val written = IdeaProject.generate(manifest, runtimeJars, testJars, pluginJars)
         Term.status("Generated", written.joinToString(", ") { manifest.dir.relativize(it).toString() })
+        val generatedDirs = IdeaProject.generatedSourceDirs(manifest)
+        if (generatedDirs.isNotEmpty() && generatedDirs.none { hasFiles(manifest.dir.resolve(it)) }) {
+            Term.status("Note", "run `skf build` once so the IDE can see the code that kapt/KSP generate")
+        }
         Term.status("Note", "open the project in IntelliJ IDEA and pick a JDK; these files are machine-specific, do not commit them")
         return 0
     }
+
+    private fun hasFiles(dir: Path): Boolean =
+        Files.isDirectory(dir) && Files.walk(dir).use { paths -> paths.anyMatch { Files.isRegularFile(it) } }
 
     private fun processors(installer: Installer) = Processors(
         kapt = installer.isolatedClasspath(Manifest.KAPT, locked),

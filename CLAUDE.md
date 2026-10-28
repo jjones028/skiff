@@ -65,7 +65,7 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
   `*-compiler-plugin-embeddable` jar at the Kotlin version. `Toolchain.pluginJars` fetches it into the Maven cache
   (not locked, like the compiler itself) and `Builder` passes `-Xplugin=<jar>` plus `-P plugin:<id>:annotation=<a>`
   for both `src/` and `test/`. The plugins and their annotations are part of the build stamp. Presets such as
-  `spring`/`jpa` and the IDE (facet) side are not implemented. `compose` is a named plugin with no options.
+  `spring`/`jpa` are not implemented. `compose` is a named plugin with no options.
   `[[kotlin.compiler-plugin]]` (`ExternalPlugin`) is the generic form for any other plugin: coordinates plus raw `-P`
   options. Their artifacts are an isolated group (see below); `Installer.pluginClasspath` drops kotlin-stdlib and the
   compiler from it, since the compiler JVM already has them.
@@ -88,7 +88,14 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
      `JavaCompilation` then compiles generated Java with the JDK's `javac` (`-proc:none`) into the same classes
      directory, and generated resources and class files are copied into it.
   Everything is regenerated on each real build (the stamp covers the processors and options). Known gaps: no incremental
-  processing, no processing for `test/`, and the IDE does not see the generated sources.
+  processing and no processing for `test/`.
+- **IDE** (`IdeaProject`): besides roots and libraries, `skf idea` writes the module's Kotlin facet in the V5 format
+  the Kotlin plugin uses (`CompilerArgumentsSerializerV5`): `jvmTarget`, `languageVersion`/`apiVersion` as string
+  arguments, and `pluginClasspaths` / `pluginOptions` as array arguments (one value is the text of `<args>`, several
+  are `<arg>` children). That is how the K2 IDE finds compiler plugins. kapt and KSP output directories become source
+  roots with `generated="true"` and are created up front so the IDE picks them up. The format was checked by feeding
+  the generated `<configuration>` to IntelliJ's own `FacetSerializationKt.deserializeFacetSettings` (from the
+  installed Kotlin plugin); `IdeaProjectFacetTest` checks it structurally.
 - The compiler runs in a **child JVM** on the same `java.home` as skiff, with arguments in
   `target/kotlinc.args` / `target/kotlinc.jvm.args`, which helps with debugging failed builds.
 
