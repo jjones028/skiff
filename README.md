@@ -37,6 +37,9 @@ jvm-target = "21"
 
 [repositories]                # optional; Maven Central is always included
 internal = "https://nexus.example.com/repository/maven-public"
+
+[dev-dependencies]            # optional; only on the classpath of test/
+"org.mockito:mockito-core" = "5.14.2"
 ```
 
 ## Commands
@@ -50,6 +53,7 @@ internal = "https://nexus.example.com/repository/maven-public"
 | `skf update` | Re-resolve even if the lockfile is current |
 | `skf build [--fat]` | Compile to `target/<name>-<version>.jar` (`--fat`: `-all.jar` with dependencies) |
 | `skf run [-- args]` | Build and run |
+| `skf test [-- args]` | Compile `test/` and run it with JUnit 5 (kotlin-test is included; args go to the JUnit console launcher) |
 | `skf tree` | Dependency tree |
 | `skf classpath` | Print the dependency classpath (for IDEs/scripts) |
 | `skf clean` | Delete `target/` |

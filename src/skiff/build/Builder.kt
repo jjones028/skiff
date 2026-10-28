@@ -38,7 +38,7 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         Files.deleteIfExists(stampFile)
         classes.toFile().deleteRecursively()
         Files.createDirectories(classes)
-        compile(compiler, sources, classpath, classes)
+        compile(compiler, sources, classpath, classes, "kotlinc")
         for (resource in resources) {
             val destination = classes.resolve(manifest.resourceDir.relativize(resource).toString())
             Files.createDirectories(destination.parent)
@@ -50,7 +50,38 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         return BuildResult(classes, jar, mainClass)
     }
 
-    private fun compile(compiler: List<Path>, sources: List<Path>, classpath: List<Path>, classes: Path) {
+    /**
+     * Compiles `test/` into `target/test-classes` against [mainBuild] and [classpath] (which includes the
+     * dev-dependencies), and returns that directory. Needs the main build to be current.
+     */
+    fun buildTests(mainBuild: BuildResult, classpath: List<Path>): Path {
+        val sources = filesUnder(manifest.testDir).filter { it.toString().endsWith(".kt") }
+        if (sources.isEmpty()) throw SkiffException("no Kotlin sources found in ${manifest.dir.relativize(manifest.testDir)}")
+        val classes = manifest.targetDir.resolve("test-classes")
+        val fullClasspath = listOf(mainBuild.classesDir) + classpath
+        val mainStamp = manifest.targetDir.resolve(".build-stamp").let { if (Files.isRegularFile(it)) Files.readString(it) else "" }
+        val stampFile = manifest.targetDir.resolve(".test-stamp")
+        val stamp = stamp(sources, fullClasspath, mainBuild.mainClass) + mainStamp
+        if (Files.isDirectory(classes) && Files.isRegularFile(stampFile) && Files.readString(stampFile) == stamp) return classes
+
+        val compiler = toolchain.compilerClasspath(manifest.kotlinVersion)
+        Term.status("Compiling", "${manifest.name} v${manifest.version} tests (${manifest.dir})")
+        Files.deleteIfExists(stampFile)
+        classes.toFile().deleteRecursively()
+        Files.createDirectories(classes)
+        compile(compiler, sources, fullClasspath, classes, "kotlinc-test", "${manifest.name}-test")
+        Files.writeString(stampFile, stamp)
+        return classes
+    }
+
+    private fun compile(
+        compiler: List<Path>,
+        sources: List<Path>,
+        classpath: List<Path>,
+        classes: Path,
+        argFileName: String,
+        moduleName: String = manifest.name,
+    ) {
         val target = manifest.targetDir
         val kotlincArgs = buildList {
             add("-d"); add(classes.toString())
@@ -60,12 +91,12 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
             if ((manifest.jvmTarget.toIntOrNull() ?: Int.MAX_VALUE) <= JavaProcess.featureVersion) {
                 add("-Xjdk-release=${manifest.jvmTarget}")
             }
-            add("-module-name"); add(manifest.name)
+            add("-module-name"); add(moduleName)
             add("-no-stdlib")
             add("-no-reflect")
             sources.forEach { add(it.toString()) }
         }
-        val kotlincArgFile = target.resolve("kotlinc.args")
+        val kotlincArgFile = target.resolve("$argFileName.args")
         JavaProcess.writeArgFile(kotlincArgFile, kotlincArgs)
 
         val jvmArgs = buildList {
@@ -75,8 +106,8 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
             add(Toolchain.COMPILER_MAIN_CLASS)
             add("@$kotlincArgFile")
         }
-        val exitCode = JavaProcess.run(jvmArgs, target.resolve("kotlinc.jvm.args"), manifest.dir)
-        if (exitCode != 0) throw SkiffException("could not compile `${manifest.name}` due to the errors above")
+        val exitCode = JavaProcess.run(jvmArgs, target.resolve("$argFileName.jvm.args"), manifest.dir)
+        if (exitCode != 0) throw SkiffException("could not compile `$moduleName` due to the errors above")
     }
 
     private fun stamp(inputs: List<Path>, classpath: List<Path>, mainClass: String?): String = Hashing.sha256(buildString {

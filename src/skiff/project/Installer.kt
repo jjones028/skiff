@@ -5,6 +5,7 @@ import skiff.SkiffException
 import skiff.cli.Term
 import skiff.maven.ArtifactStore
 import skiff.maven.DependencyResolver
+import skiff.maven.ModuleId
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -15,8 +16,9 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
      *
      * @param update re-resolve even if the lockfile is current (`skf update`).
      * @param locked fail instead of changing the lockfile (`--locked`, for CI).
+     * @param tests include the dev-dependencies and the test runner; otherwise only what the project itself needs.
      */
-    fun install(update: Boolean = false, locked: Boolean = false): List<Path> {
+    fun install(update: Boolean = false, locked: Boolean = false, tests: Boolean = false): List<Path> {
         val existing = Lockfile.read(manifest.lockFile)
         val fingerprint = manifest.resolutionFingerprint()
         val lock = if (!update && existing != null && existing.fingerprint == fingerprint) {
@@ -31,8 +33,10 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
             resolve(fingerprint, existing)
         }
 
-        val jars = store.getAll(lock.packages.filter { it.sha256 != null }.map { it.jarPath })
-        return lock.packages.mapNotNull { pkg ->
+        val needed = reachable(lock, if (tests) manifest.testDependencies().keys else manifest.allDependencies().keys)
+        val packages = lock.packages.filter { it.module in needed }
+        val jars = store.getAll(packages.filter { it.sha256 != null }.map { it.jarPath })
+        return packages.mapNotNull { pkg ->
             val expected = pkg.sha256 ?: return@mapNotNull null
             val jar = jars.getValue(pkg.jarPath)
             val actual = Hashing.sha256(jar)
@@ -46,9 +50,20 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
         }
     }
 
+    private fun reachable(lock: Lockfile, roots: Collection<ModuleId>): Set<ModuleId> {
+        val byModule = lock.packages.associateBy { it.module }
+        val seen = LinkedHashSet<ModuleId>()
+        val queue = ArrayDeque(roots)
+        while (queue.isNotEmpty()) {
+            val module = queue.removeFirst()
+            if (byModule.containsKey(module) && seen.add(module)) queue += byModule.getValue(module).dependencies
+        }
+        return seen
+    }
+
     private fun resolve(fingerprint: String, previous: Lockfile?): Lockfile {
         Term.status("Resolving", "dependencies")
-        val resolved = DependencyResolver(store).resolve(manifest.allDependencies())
+        val resolved = DependencyResolver(store).resolve(manifest.testDependencies())
         val jars = store.getAll(resolved.filter { it.hasJar }.map { it.jarPath })
         val packages = resolved.map { module ->
             LockedPackage(

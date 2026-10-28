@@ -23,7 +23,11 @@ simple projects. User-facing docs are in README.md; this file records design dec
 bin/skf.cmd build --fat               # self-host build -> target/skiff-0.1.0-all.jar
 ```
 
-There are no unit tests yet. The manual end-to-end check used so far (run in a short temp path;
+Unit tests live in `test/` (mirroring the `src/skiff` packages) and run with `bin/skf.cmd test` (about 1 s once compiled).
+Add a test alongside any change to the parsers, version logic, manifest editing or POM resolution. `PomResolverTest`
+shows how to resolve fixture POMs from a temp directory with an offline `ArtifactStore`, so tests need no network.
+
+There is no automated end-to-end test yet. The manual check used so far (run in a short temp path;
 `cmd.exe` cannot start in paths longer than about 260 characters):
 
 ```powershell
@@ -57,14 +61,20 @@ skf tree; skf build --fat; skf install --locked; skf run --offline
   the locked sha256.
 - **Incremental build** is all-or-nothing: `target/.build-stamp` hashes the source paths, sizes, mtimes,
   classpath and settings. Any change recompiles everything.
+- **Tests**: `test/*.kt` is compiled into `target/test-classes` against the main classes plus `[dev-dependencies]`, then run
+  with the JUnit Platform console launcher (`TestRunner`). When `test/` has Kotlin sources, `kotlin-test-junit5`,
+  `junit-jupiter-engine` and `junit-platform-console` become extra roots (`Manifest.testDependencies`); versions are
+  pinned in `Manifest`. Dev roots are resolved and locked together with the real dependencies (so versions unify),
+  but `Installer.install(tests = false)` only returns jars reachable from the real roots, which keeps them out of
+  builds and fat jars. The fingerprint is unchanged for projects without dev roots.
 - The compiler runs in a **child JVM** on the same `java.home` as skiff, with arguments in
   `target/kotlinc.args` / `target/kotlinc.jvm.args`, which helps with debugging failed builds.
 
 ## Known gaps / roadmap (rough priority)
 
-1. **Tests**: unit tests for `Version`, `VersionRange`, `TomlParser`, `ManifestEditor`, `PomResolver`
-   (fixtures), and a `skf test` command (JUnit Platform console launcher + kotlin-test) to run them.
-   Needs `[dev-dependencies]` and a `test/` source dir.
+1. **More tests**: `skf test` and unit tests for the pure logic exist; still missing are tests for `JsonParser`,
+   `GradleModule` (only covered through `DependencyResolverTest`), `Lockfile`,
+   `MainClassDetector`, and an automated end-to-end test of the CLI.
 2. **Gradle module metadata constraints**: Gradle-published `dependencyConstraints` (e.g. kotlin-stdlib
    aligning `-jdk7`/`-jdk8`) are ignored, so old `kotlin-stdlib-jdk7/jdk8 1.9.x` jars can show up. Read
    constraints from `.module` and apply them as version floors.

@@ -4,6 +4,7 @@ import skiff.BuildInfo
 import skiff.SkiffException
 import skiff.build.Builder
 import skiff.build.Runner
+import skiff.build.TestRunner
 import skiff.build.Toolchain
 import skiff.maven.ArtifactStore
 import skiff.maven.MavenMetadata
@@ -59,6 +60,7 @@ class Cli {
             "update" -> install(update = true)
             "build", "b" -> build()
             "run", "r" -> runProject(params + passthrough)
+            "test", "t" -> test(passthrough)
             "tree" -> tree()
             "classpath" -> classpath()
             "clean" -> clean()
@@ -143,6 +145,18 @@ class Cli {
         return Runner.run(manifest, result, classpath, args)
     }
 
+    private fun test(args: List<String>): Int {
+        val manifest = project()
+        if (!manifest.hasTests) throw SkiffException("no Kotlin sources found in ${manifest.dir.relativize(manifest.testDir)}")
+        val store = store(manifest)
+        val installer = Installer(manifest, store)
+        val builder = Builder(manifest, Toolchain(store))
+        val mainBuild = builder.build(installer.install(locked = locked))
+        val classpath = installer.install(locked = locked, tests = true)
+        val testClasses = builder.buildTests(mainBuild, classpath)
+        return TestRunner.run(manifest, mainBuild, testClasses, classpath, args)
+    }
+
     private fun tree(): Int {
         val manifest = project()
         Installer(manifest, store(manifest)).install(locked = locked)
@@ -198,6 +212,7 @@ class Cli {
                 update             Re-resolve dependencies even if Skiff.lock is current
                 build              Compile the project into target/<name>-<version>.jar
                 run [-- args]      Build and run the project
+                test [-- args]     Compile and run the tests in test/ (extra args go to the JUnit console launcher)
                 tree               Show the dependency tree
                 classpath          Print the dependency classpath
                 clean              Delete the target directory
