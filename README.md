@@ -56,6 +56,7 @@ internal = "https://nexus.example.com/repository/maven-public"
 | `skf test [-- args]` | Compile `test/` and run it with JUnit 5 (kotlin-test is included; args go to the JUnit console launcher) |
 | `skf tree` | Dependency tree |
 | `skf classpath` | Print the dependency classpath (for IDEs/scripts) |
+| `skf idea` | Generate IntelliJ IDEA project files (git-ignored; re-run after changing dependencies) |
 | `skf clean` | Delete `target/` |
 
 Global flags: `--locked` (fail if `Skiff.lock` would change, for CI), `--offline` (local cache only).
