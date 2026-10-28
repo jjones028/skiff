@@ -10,6 +10,7 @@ import skiff.maven.ArtifactStore
 import skiff.maven.MavenMetadata
 import skiff.maven.ModuleId
 import skiff.maven.Repository
+import skiff.project.IdeaProject
 import skiff.project.Installer
 import skiff.project.Lockfile
 import skiff.project.Manifest
@@ -61,6 +62,7 @@ class Cli {
             "build", "b" -> build()
             "run", "r" -> runProject(params + passthrough)
             "test", "t" -> test(passthrough)
+            "idea" -> idea()
             "tree" -> tree()
             "classpath" -> classpath()
             "clean" -> clean()
@@ -157,6 +159,17 @@ class Cli {
         return TestRunner.run(manifest, mainBuild, testClasses, classpath, args)
     }
 
+    private fun idea(): Int {
+        val manifest = project()
+        val installer = Installer(manifest, store(manifest))
+        val runtimeJars = installer.install(locked = locked)
+        val testJars = installer.install(locked = locked, tests = true)
+        val written = IdeaProject.generate(manifest, runtimeJars, testJars)
+        Term.status("Generated", written.joinToString(", ") { manifest.dir.relativize(it).toString() })
+        Term.status("Note", "open the project in IntelliJ IDEA and pick a JDK; these files are machine-specific, do not commit them")
+        return 0
+    }
+
     private fun tree(): Int {
         val manifest = project()
         Installer(manifest, store(manifest)).install(locked = locked)
@@ -216,6 +229,7 @@ class Cli {
                 tree               Show the dependency tree
                 classpath          Print the dependency classpath
                 clean              Delete the target directory
+                idea               Generate IntelliJ IDEA project files (module + libraries)
 
             Options:
                 --locked           Fail if Skiff.lock would change (for CI)

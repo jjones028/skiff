@@ -80,6 +80,7 @@ class JsonParser(private val text: String) {
             when (c) {
                 '"' -> return out.toString()
                 '\\' -> {
+                    if (pos >= text.length) fail("unterminated string")
                     val escaped = text[pos++]
                     when (escaped) {
                         'n' -> out.append('\n')
@@ -88,7 +89,9 @@ class JsonParser(private val text: String) {
                         'b' -> out.append('\b')
                         'f' -> out.append('\u000c')
                         'u' -> {
-                            out.append(text.substring(pos, pos + 4).toInt(16).toChar())
+                            val code = text.substring(pos, minOf(pos + 4, text.length)).takeIf { it.length == 4 }?.toIntOrNull(16)
+                                ?: fail("invalid unicode escape")
+                            out.append(code.toChar())
                             pos += 4
                         }
                         else -> out.append(escaped)

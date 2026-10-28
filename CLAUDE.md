@@ -44,7 +44,7 @@ skf tree; skf build --fat; skf install --locked; skf run --offline
 | `cli` | `Cli` parses args and dispatches commands; `Term` does Cargo-style output |
 | `toml`, `json` | Minimal parsers (TOML subset without dates; JSON for Gradle `.module` files) |
 | `maven` | `ArtifactStore` (HTTP + `~/.skiff/cache/maven`, sha1-verified), `Pom`/`PomResolver` (parents, `${}` interpolation, dependencyManagement + BOM imports), `DependencyResolver` (graph walk), `Version`/`VersionRange`, `MavenMetadata` (latest/ranges), `GradleModule` (KMP JVM redirect) |
-| `project` | `Manifest` (Skiff.toml), `ManifestEditor` (text edits that keep comments), `Lockfile`/`LockedPackage`, `Installer` (manifest -> lock -> jars), `ProjectTemplate` |
+| `project` | `Manifest` (Skiff.toml), `ManifestEditor` (text edits that keep comments), `Lockfile`/`LockedPackage`, `Installer` (manifest -> lock -> jars), `IdeaProject` (`skf idea`: generated, git-ignored IntelliJ module), `ProjectTemplate` |
 | `build` | `Toolchain` (resolves `kotlin-compiler-embeddable` like any other dependency, caches its classpath in `~/.skiff/toolchains`), `Builder` (child JVM running `K2JVMCompiler` via argfiles, then jar), `JarWriter`, `MainClassDetector`, `Runner`, `JavaProcess` |
 
 ### Key decisions
@@ -72,9 +72,8 @@ skf tree; skf build --fat; skf install --locked; skf run --offline
 
 ## Known gaps / roadmap (rough priority)
 
-1. **More tests**: `skf test` and unit tests for the pure logic exist; still missing are tests for `JsonParser`,
-   `GradleModule` (only covered through `DependencyResolverTest`), `Lockfile`,
-   `MainClassDetector`, and an automated end-to-end test of the CLI.
+1. **End-to-end test**: unit tests cover the parsers, versions, manifest/lockfile, resolvers and main-class detection;
+   what is missing is an automated end-to-end test of the CLI (`new`, `add`, `run`, `install --locked`).
 2. **Gradle module metadata constraints**: Gradle-published `dependencyConstraints` (e.g. kotlin-stdlib
    aligning `-jdk7`/`-jdk8`) are ignored, so old `kotlin-stdlib-jdk7/jdk8 1.9.x` jars can show up. Read
    constraints from `.module` and apply them as version floors.

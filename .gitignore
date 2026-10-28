@@ -1,3 +1,5 @@
 /target
 /build
 /bin/skiff.jar
+/.idea
+*.iml
