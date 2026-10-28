@@ -23,6 +23,8 @@ data class Manifest(
     val repositories: List<Repository>,
     val plugins: List<PluginConfig> = emptyList(),
     val externalPlugins: List<ExternalPlugin> = emptyList(),
+    val kapt: KaptConfig? = null,
+    val ksp: KspConfig? = null,
 ) {
     val file: Path get() = dir.resolve(FILE_NAME)
     val lockFile: Path get() = dir.resolve(Lockfile.FILE_NAME)
@@ -41,11 +43,16 @@ data class Manifest(
     /** The roots of the test classpath: everything in [allDependencies], the dev-dependencies and the test runner. */
     fun testDependencies(): Map<ModuleId, String> = allDependencies() + devDependencies + testRunnerDependencies()
 
-    /** The `[[kotlin.compiler-plugin]]` artifacts; their jars go on the compiler's plugin classpath only. */
-    fun pluginDependencies(): Map<ModuleId, String> = externalPlugins.associate { it.module to it.version }
-
-    /** Every root that `Skiff.lock` covers. */
-    fun lockRoots(): Map<ModuleId, String> = testDependencies() + pluginDependencies()
+    /**
+     * Roots that are resolved and locked on their own, per configuration, so they never change the versions the
+     * project itself uses: the `[[kotlin.compiler-plugin]]` artifacts under [PLUGINS] and the annotation processors
+     * under [KAPT] and [KSP]. Empty groups are left out.
+     */
+    fun isolatedRoots(): Map<String, Map<ModuleId, String>> = mapOf(
+        PLUGINS to externalPlugins.associate { it.module to it.version },
+        KAPT to kapt?.processors.orEmpty(),
+        KSP to ksp?.processors.orEmpty(),
+    ).filterValues { it.isNotEmpty() }
 
     /** Roots that exist only for testing, locked next to the real dependencies but kept off the build classpath. */
     private fun testRunnerDependencies(): Map<ModuleId, String> =
@@ -55,7 +62,10 @@ data class Manifest(
     /** Changes whenever anything that affects resolution changes, so a stale lockfile can be detected. */
     fun resolutionFingerprint(): String = Hashing.sha256(buildString {
         allDependencies().toSortedMap().forEach { (module, version) -> append("$module=$version\n") }
-        lockRoots().filter { (module, version) -> allDependencies()[module] != version }.toSortedMap().forEach { (module, version) -> append("dev:$module=$version\n") }
+        testDependencies().filter { (module, version) -> allDependencies()[module] != version }.toSortedMap().forEach { (module, version) -> append("dev:$module=$version\n") }
+        for ((configuration, roots) in isolatedRoots().toSortedMap()) {
+            roots.toSortedMap().forEach { (module, version) -> append("$configuration:$module=$version\n") }
+        }
         repositories.forEach { append("repository=${it.url}\n") }
     })
 
@@ -63,6 +73,12 @@ data class Manifest(
         const val FILE_NAME = "Skiff.toml"
         const val DEFAULT_KOTLIN_VERSION = "2.4.21"
         const val DEFAULT_JVM_TARGET = "21"
+        /** The lockfile configuration of the `[[kotlin.compiler-plugin]]` artifacts. */
+        const val PLUGINS = "plugins"
+
+        /** The lockfile configurations of the kapt and KSP annotation processors. */
+        const val KAPT = "kapt"
+        const val KSP = "ksp"
         const val JUNIT_JUPITER_VERSION = "5.11.4"
         const val JUNIT_PLATFORM_VERSION = "1.11.4"
         val KOTLIN_STDLIB = ModuleId("org.jetbrains.kotlin", "kotlin-stdlib")
@@ -108,7 +124,52 @@ data class Manifest(
                 repositories = listOf(Repository.MAVEN_CENTRAL) + extraRepositories,
                 plugins = plugins(kotlin),
                 externalPlugins = externalPlugins(kotlin),
+                kapt = kapt(toml),
+                ksp = ksp(toml),
             )
+        }
+
+        /** Reads `[kapt-dependencies]` and `[kapt]`; null when no processors are listed. */
+        private fun kapt(toml: Map<String, Any?>): KaptConfig? {
+            val processors = dependencyTable(toml, "kapt-dependencies")
+            val settings = toml.table("kapt").orEmpty()
+            val unknown = settings.keys - setOf("options", "correct-error-types")
+            if (unknown.isNotEmpty()) throw SkiffException("$FILE_NAME: unknown option '${unknown.first()}' in [kapt]")
+            if (processors.isEmpty()) {
+                if (settings.isNotEmpty()) throw SkiffException("$FILE_NAME: [kapt] is configured but [kapt-dependencies] lists no processors")
+                return null
+            }
+            val correctErrorTypes = when (val value = settings["correct-error-types"]) {
+                null -> true
+                is Boolean -> value
+                else -> throw SkiffException("$FILE_NAME: kapt.correct-error-types must be true or false")
+            }
+            return KaptConfig(processors, options(settings, "kapt"), correctErrorTypes)
+        }
+
+        /** Reads `[ksp-dependencies]` and `[ksp]`; null when no processors are listed. */
+        private fun ksp(toml: Map<String, Any?>): KspConfig? {
+            val processors = dependencyTable(toml, "ksp-dependencies")
+            val settings = toml.table("ksp").orEmpty()
+            val unknown = settings.keys - setOf("options", "version")
+            if (unknown.isNotEmpty()) throw SkiffException("$FILE_NAME: unknown option '${unknown.first()}' in [ksp]")
+            if (processors.isEmpty()) {
+                if (settings.isNotEmpty()) throw SkiffException("$FILE_NAME: [ksp] is configured but [ksp-dependencies] lists no processors")
+                return null
+            }
+            return KspConfig(processors, options(settings, "ksp"), settings.string("version", "ksp") ?: KspConfig.DEFAULT_VERSION)
+        }
+
+        /** Reads the `options = { key = "value" }` table of a processor section. */
+        private fun options(settings: Map<String, Any?>, section: String): Map<String, String> = when (val value = settings["options"]) {
+            null -> emptyMap()
+            is Map<*, *> -> value.entries.associate { (key, option) ->
+                if (option !is String && option !is Boolean && option !is Number) {
+                    throw SkiffException("$FILE_NAME: $section.options.$key must be a string, number or boolean")
+                }
+                key.toString() to option.toString()
+            }
+            else -> throw SkiffException("$FILE_NAME: $section.options must be a table")
         }
 
         /** Reads the `[[kotlin.compiler-plugin]]` entries: `dependency = "group:artifact:version"` and optional `options`. */

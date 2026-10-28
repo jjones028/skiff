@@ -49,8 +49,8 @@ internal = "https://nexus.example.com/repository/maven-public"
 ### Compiler plugins
 
 `[kotlin] plugins` enables Kotlin compiler plugins; skiff downloads the plugin jar that matches `[kotlin].version`.
-Supported: `serialization`, `allopen`, `noarg`, `sam-with-receiver` and `compose`. The last three do nothing until you name the
-annotations they act on in `[kotlin.<plugin>] annotations = [...]`. `serialization` and `compose` also need their
+Supported: `serialization`, `allopen`, `noarg`, `sam-with-receiver` and `compose`. `allopen`, `noarg` and
+`sam-with-receiver` do nothing until you name the annotations they act on in `[kotlin.<plugin>] annotations = [...]`. `serialization` and `compose` also need their
 runtime libraries in `[dependencies]` (for example `"org.jetbrains.kotlinx:kotlinx-serialization-json"`, or
 `"org.jetbrains.compose.runtime:runtime"`, which needs `google = "https://maven.google.com"` under `[repositories]`).
 Plugins apply to `src/` and `test/`. IntelliJ does not read them from the files `skf idea` writes, so the IDE may
@@ -65,7 +65,38 @@ options = ["plugin:dev.example.my:flag=true"]
 ```
 
 These jars (and their dependencies, minus the Kotlin standard library and compiler) go on the compiler's plugin
-classpath only. They are recorded in `Skiff.lock` but never end up in your program's classpath or fat jar.
+classpath only. They are resolved separately from your dependencies and recorded in their own section of
+`Skiff.lock`, so they can never change the versions your program uses or end up in its classpath or fat jar.
+
+### Annotation processing (kapt and KSP)
+
+List the processors in their own tables. Processors are resolved separately from your dependencies, like compiler
+plugins, so a processor's libraries never leak into your program. The annotations themselves are ordinary
+`[dependencies]`.
+
+```toml
+[dependencies]
+"com.google.auto.service:auto-service-annotations" = "1.1.1"
+
+[kapt-dependencies]           # Java annotation processors, run by kapt
+"com.google.auto.service:auto-service" = "1.1.1"
+
+[kapt]                        # optional
+correct-error-types = true    # default; replaces generated types in stubs
+options = { "some.option" = "value" }
+
+[ksp-dependencies]            # KSP processors
+"dev.zacsweers.autoservice:auto-service-ksp" = "1.2.0"
+
+[ksp]                         # optional
+version = "2.3.12"            # KSP is versioned separately from Kotlin
+options = { "autoservice.verify" = "true" }
+```
+
+On `skf build` KSP runs first, then kapt, then the normal compilation sees the generated Kotlin and Java sources.
+Generated Java is compiled with the JDK's `javac` (skiff must run on a JDK), and generated resources, such as
+`META-INF/services` files, are added to the jar. Output is in `target/generated/`. Processing applies to `src/` only,
+runs on every real build, and the IDE files from `skf idea` do not include the generated sources.
 
 ## Commands
 

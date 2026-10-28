@@ -51,6 +51,22 @@ class LockfileTest {
     }
 
     @Test
+    fun isolatedConfigurationsRoundTripAndDoNotMixWithTheMainPackages() {
+        val withIsolated = lockfile.copy(
+            isolated = mapOf(
+                "plugins" to listOf(LockedPackage(ModuleId("g", "a"), "9.9", "e".repeat(64), emptyList())),
+                "ksp" to listOf(LockedPackage(ModuleId("k", "proc"), "1", "d".repeat(64), listOf(ModuleId("g", "a")))),
+            ),
+        )
+        Files.writeString(file, withIsolated.render())
+        val read = Lockfile.read(file)!!
+        assertEquals(withIsolated, read)
+        assertEquals("1.0", read.packages.first { it.module == ModuleId("g", "a") }.version)
+        assertEquals("9.9", read.isolated.getValue("plugins").single().version)
+        assertTrue("configuration = \"ksp\"" in withIsolated.render())
+    }
+
+    @Test
     fun readReturnsNullWhenTheFileIsMissing() {
         assertNull(Lockfile.read(file))
     }
