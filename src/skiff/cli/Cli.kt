@@ -3,6 +3,7 @@ package skiff.cli
 import skiff.BuildInfo
 import skiff.SkiffException
 import skiff.build.Builder
+import skiff.build.Processors
 import skiff.build.Runner
 import skiff.build.TestRunner
 import skiff.build.Toolchain
@@ -136,7 +137,7 @@ class Cli {
         val store = store(manifest)
         val installer = Installer(manifest, store)
         val classpath = installer.install(locked = locked)
-        Builder(manifest, Toolchain(store)).build(classpath, fatJar = fat, pluginClasspath = installer.pluginClasspath(locked))
+        Builder(manifest, Toolchain(store)).build(classpath, fatJar = fat, pluginClasspath = installer.pluginClasspath(locked), processors = processors(installer))
         return 0
     }
 
@@ -145,7 +146,7 @@ class Cli {
         val store = store(manifest)
         val installer = Installer(manifest, store)
         val classpath = installer.install(locked = locked)
-        val result = Builder(manifest, Toolchain(store)).build(classpath, pluginClasspath = installer.pluginClasspath(locked))
+        val result = Builder(manifest, Toolchain(store)).build(classpath, pluginClasspath = installer.pluginClasspath(locked), processors = processors(installer))
         return Runner.run(manifest, result, classpath, args)
     }
 
@@ -156,7 +157,7 @@ class Cli {
         val installer = Installer(manifest, store)
         val builder = Builder(manifest, Toolchain(store))
         val pluginClasspath = installer.pluginClasspath(locked)
-        val mainBuild = builder.build(installer.install(locked = locked), pluginClasspath = pluginClasspath)
+        val mainBuild = builder.build(installer.install(locked = locked), pluginClasspath = pluginClasspath, processors = processors(installer))
         val classpath = installer.install(locked = locked, tests = true)
         val testClasses = builder.buildTests(mainBuild, classpath, pluginClasspath)
         return TestRunner.run(manifest, mainBuild, testClasses, classpath, args)
@@ -172,6 +173,11 @@ class Cli {
         Term.status("Note", "open the project in IntelliJ IDEA and pick a JDK; these files are machine-specific, do not commit them")
         return 0
     }
+
+    private fun processors(installer: Installer) = Processors(
+        kapt = installer.isolatedClasspath(Manifest.KAPT, locked),
+        ksp = installer.isolatedClasspath(Manifest.KSP, locked),
+    )
 
     private fun tree(): Int {
         val manifest = project()

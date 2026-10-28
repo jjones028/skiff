@@ -67,11 +67,28 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
   for both `src/` and `test/`. The plugins and their annotations are part of the build stamp. Presets such as
   `spring`/`jpa` and the IDE (facet) side are not implemented. `compose` is a named plugin with no options.
   `[[kotlin.compiler-plugin]]` (`ExternalPlugin`) is the generic form for any other plugin: coordinates plus raw `-P`
-  options. Those artifacts are resolved like normal dependencies and locked (`Manifest.lockRoots`), but
-  `Installer.pluginClasspath` returns only the jars reachable from them (minus kotlin-stdlib and the compiler, which the
-  compiler JVM already has), so they stay off the program classpath. Known limitation: they are resolved together with
-  the real dependencies, so a plugin's transitive dependency can raise the version of a library the program also uses.
-  kapt and KSP are different mechanisms and are not supported.
+  options. Their artifacts are an isolated group (see below); `Installer.pluginClasspath` drops kotlin-stdlib and the
+  compiler from it, since the compiler JVM already has them.
+- **Isolated resolution** (`Manifest.isolatedRoots`, `Lockfile.isolated`): compiler plugins (`plugins`), kapt
+  processors (`kapt`) and KSP processors (`ksp`) are each resolved by their own `DependencyResolver.resolve` call and
+  stored in `Skiff.lock` as `[[package]]` entries with a `configuration` key, so their versions can never change the
+  program's classpath (the main entries have no `configuration`). They are part of the fingerprint, listed by
+  `Installer.isolatedClasspath`, and never reach `classpath`, `tree` or fat jars.
+- **Annotation processing** (`[kapt-dependencies]`/`[kapt]`, `[ksp-dependencies]`/`[ksp]`, `AnnotationProcessing`,
+  `KaptConfig`/`KspConfig`) runs inside `Builder.build` before the main compile, for `src/` only (not `test/`):
+  1. KSP: a child JVM runs `KSPJvmMain` (`symbol-processing-aa-embeddable`, resolved and cached by
+     `Toolchain.kspClasspath`; KSP has its own version, default `KspConfig.DEFAULT_VERSION`) with the processor jars as
+     the last argument. Output goes to `target/generated/ksp/{kotlin,java,classes,resources}`.
+  2. kapt: an extra compiler pass with `-Xplugin=kotlin-annotation-processing-embeddable` and
+     `-P plugin:org.jetbrains.kotlin.kapt3:aptMode=stubsAndApt`. In that mode kapt compiles nothing; it writes stubs
+     and generated sources (`target/generated/kapt/{sources,classes,kotlin}`), so the main compile is a second pass.
+     All processor options travel in one Base64 `apoptions` value (`AnnotationProcessing.encodeOptions`);
+     `apOption` can be given only once. `kapt.kotlin.generated` points processors at `target/generated/kapt/kotlin`.
+  3. The main compile gets the original and generated Kotlin and Java sources (kotlinc only reads the Java);
+     `JavaCompilation` then compiles generated Java with the JDK's `javac` (`-proc:none`) into the same classes
+     directory, and generated resources and class files are copied into it.
+  Everything is regenerated on each real build (the stamp covers the processors and options). Known gaps: no incremental
+  processing, no processing for `test/`, and the IDE does not see the generated sources.
 - The compiler runs in a **child JVM** on the same `java.home` as skiff, with arguments in
   `target/kotlinc.args` / `target/kotlinc.jvm.args`, which helps with debugging failed builds.
 
@@ -83,7 +100,8 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
 2. **Compile speed**: each build spawns a new JVM (about 3–9 s). Options: run `K2JVMCompiler` in-process
    through an isolated `URLClassLoader`, or keep a compiler daemon running between builds. Real
    incremental compilation could come later through `kotlin-build-tools-api`.
-3. **Java sources** in `src/` (run javac via `ToolProvider` after kotlinc).
+3. **Java sources** in `src/`: only generated Java is compiled so far (`JavaCompilation`); hand-written `.java` files
+   in `src/` still need to be passed to kotlinc and then to javac.
 4. **Private repositories with auth** (`[repositories]` credentials from env vars or `~/.skiff/config.toml`),
    and `skf publish` (POM generation, sources/javadoc jars, signing).
 5. **Classifiers and non-jar types** (currently skipped with a warning), and Maven's `<relocation>`.

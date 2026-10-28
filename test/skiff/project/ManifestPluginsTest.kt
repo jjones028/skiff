@@ -95,7 +95,7 @@ class ManifestPluginsTest {
         )
         assertEquals(
             mapOf(ModuleId("dev.example", "my-plugin") to "1.2.3", ModuleId("dev.example", "other-plugin") to "2.0"),
-            manifest.pluginDependencies(),
+            manifest.isolatedRoots().getValue(Manifest.PLUGINS),
         )
     }
 
@@ -106,7 +106,7 @@ class ManifestPluginsTest {
         val module = ModuleId("dev.example", "my-plugin")
         assertEquals(false, module in withPlugin.allDependencies())
         assertEquals(false, module in withPlugin.testDependencies())
-        assertEquals("1.2.3", withPlugin.lockRoots()[module])
+        assertEquals("1.2.3", withPlugin.isolatedRoots()[Manifest.PLUGINS]?.get(module))
         assertEquals(plain.allDependencies(), withPlugin.allDependencies())
         assertTrue(plain.resolutionFingerprint() != withPlugin.resolutionFingerprint())
     }
