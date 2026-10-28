@@ -134,16 +134,18 @@ class Cli {
     private fun build(): Int {
         val manifest = project()
         val store = store(manifest)
-        val classpath = Installer(manifest, store).install(locked = locked)
-        Builder(manifest, Toolchain(store)).build(classpath, fatJar = fat)
+        val installer = Installer(manifest, store)
+        val classpath = installer.install(locked = locked)
+        Builder(manifest, Toolchain(store)).build(classpath, fatJar = fat, pluginClasspath = installer.pluginClasspath(locked))
         return 0
     }
 
     private fun runProject(args: List<String>): Int {
         val manifest = project()
         val store = store(manifest)
-        val classpath = Installer(manifest, store).install(locked = locked)
-        val result = Builder(manifest, Toolchain(store)).build(classpath)
+        val installer = Installer(manifest, store)
+        val classpath = installer.install(locked = locked)
+        val result = Builder(manifest, Toolchain(store)).build(classpath, pluginClasspath = installer.pluginClasspath(locked))
         return Runner.run(manifest, result, classpath, args)
     }
 
@@ -153,9 +155,10 @@ class Cli {
         val store = store(manifest)
         val installer = Installer(manifest, store)
         val builder = Builder(manifest, Toolchain(store))
-        val mainBuild = builder.build(installer.install(locked = locked))
+        val pluginClasspath = installer.pluginClasspath(locked)
+        val mainBuild = builder.build(installer.install(locked = locked), pluginClasspath = pluginClasspath)
         val classpath = installer.install(locked = locked, tests = true)
-        val testClasses = builder.buildTests(mainBuild, classpath)
+        val testClasses = builder.buildTests(mainBuild, classpath, pluginClasspath)
         return TestRunner.run(manifest, mainBuild, testClasses, classpath, args)
     }
 

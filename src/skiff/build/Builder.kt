@@ -14,7 +14,7 @@ import kotlin.io.path.invariantSeparatorsPathString
  * `target/<name>-<version>.jar`. Skips everything when nothing that affects the output has changed.
  */
 class Builder(private val manifest: Manifest, private val toolchain: Toolchain) {
-    fun build(classpath: List<Path>, fatJar: Boolean = false): BuildResult {
+    fun build(classpath: List<Path>, fatJar: Boolean = false, pluginClasspath: List<Path> = emptyList()): BuildResult {
         val sources = filesUnder(manifest.sourceDir).filter { it.toString().endsWith(".kt") }
         if (sources.isEmpty()) throw SkiffException("no Kotlin sources found in ${manifest.dir.relativize(manifest.sourceDir)}")
         val resources = filesUnder(manifest.resourceDir)
@@ -26,7 +26,7 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         val label = "${manifest.name} v${manifest.version} (${manifest.dir})"
 
         val stampFile = target.resolve(".build-stamp$suffix")
-        val stamp = stamp(sources + resources, classpath, mainClass)
+        val stamp = stamp(sources + resources, classpath, mainClass, pluginClasspath)
         if (Files.isRegularFile(jar) && Files.isRegularFile(stampFile) && Files.readString(stampFile) == stamp) {
             Term.status("Fresh", label)
             return BuildResult(classes, jar, mainClass)
@@ -38,7 +38,7 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         Files.deleteIfExists(stampFile)
         classes.toFile().deleteRecursively()
         Files.createDirectories(classes)
-        compile(compiler, sources, classpath, classes, "kotlinc")
+        compile(compiler, sources, classpath, classes, "kotlinc", pluginClasspath = pluginClasspath)
         for (resource in resources) {
             val destination = classes.resolve(manifest.resourceDir.relativize(resource).toString())
             Files.createDirectories(destination.parent)
@@ -54,14 +54,14 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
      * Compiles `test/` into `target/test-classes` against [mainBuild] and [classpath] (which includes the
      * dev-dependencies), and returns that directory. Needs the main build to be current.
      */
-    fun buildTests(mainBuild: BuildResult, classpath: List<Path>): Path {
+    fun buildTests(mainBuild: BuildResult, classpath: List<Path>, pluginClasspath: List<Path> = emptyList()): Path {
         val sources = filesUnder(manifest.testDir).filter { it.toString().endsWith(".kt") }
         if (sources.isEmpty()) throw SkiffException("no Kotlin sources found in ${manifest.dir.relativize(manifest.testDir)}")
         val classes = manifest.targetDir.resolve("test-classes")
         val fullClasspath = listOf(mainBuild.classesDir) + classpath
         val mainStamp = manifest.targetDir.resolve(".build-stamp").let { if (Files.isRegularFile(it)) Files.readString(it) else "" }
         val stampFile = manifest.targetDir.resolve(".test-stamp")
-        val stamp = stamp(sources, fullClasspath, mainBuild.mainClass) + mainStamp
+        val stamp = stamp(sources, fullClasspath, mainBuild.mainClass, pluginClasspath) + mainStamp
         if (Files.isDirectory(classes) && Files.isRegularFile(stampFile) && Files.readString(stampFile) == stamp) return classes
 
         val compiler = toolchain.compilerClasspath(manifest.kotlinVersion)
@@ -69,7 +69,7 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         Files.deleteIfExists(stampFile)
         classes.toFile().deleteRecursively()
         Files.createDirectories(classes)
-        compile(compiler, sources, fullClasspath, classes, "kotlinc-test", "${manifest.name}-test")
+        compile(compiler, sources, fullClasspath, classes, "kotlinc-test", "${manifest.name}-test", pluginClasspath)
         Files.writeString(stampFile, stamp)
         return classes
     }
@@ -81,6 +81,7 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         classes: Path,
         argFileName: String,
         moduleName: String = manifest.name,
+        pluginClasspath: List<Path> = emptyList(),
     ) {
         val target = manifest.targetDir
         val kotlincArgs = buildList {
@@ -94,6 +95,9 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
             add("-module-name"); add(moduleName)
             add("-no-stdlib")
             add("-no-reflect")
+            toolchain.pluginJars(manifest.kotlinVersion, manifest.plugins.map { it.plugin }).forEach { add("-Xplugin=$it") }
+            pluginClasspath.forEach { add("-Xplugin=$it") }
+            (manifest.plugins.flatMap { it.options() } + manifest.externalPlugins.flatMap { it.options }).forEach { add("-P"); add(it) }
             sources.forEach { add(it.toString()) }
         }
         val kotlincArgFile = target.resolve("$argFileName.args")
@@ -110,12 +114,15 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         if (exitCode != 0) throw SkiffException("could not compile `$moduleName` due to the errors above")
     }
 
-    private fun stamp(inputs: List<Path>, classpath: List<Path>, mainClass: String?): String = Hashing.sha256(buildString {
+    private fun stamp(inputs: List<Path>, classpath: List<Path>, mainClass: String?, pluginClasspath: List<Path>): String = Hashing.sha256(buildString {
         appendLine("kotlin=${manifest.kotlinVersion} jvm-target=${manifest.jvmTarget} main=$mainClass")
+        manifest.plugins.forEach { appendLine("plugin=${it.plugin.id} ${it.annotations}") }
         for (file in inputs) {
             appendLine("${manifest.dir.relativize(file).invariantSeparatorsPathString} ${Files.size(file)} ${Files.getLastModifiedTime(file).toMillis()}")
         }
         classpath.forEach { appendLine(it.toString()) }
+        pluginClasspath.forEach { appendLine("plugin-jar=$it") }
+        manifest.externalPlugins.forEach { appendLine("plugin-options=${it.options}") }
     })
 
     private fun filesUnder(dir: Path): List<Path> =

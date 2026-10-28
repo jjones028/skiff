@@ -61,6 +61,17 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
   pinned in `Manifest`. Dev roots are resolved and locked together with the real dependencies (so versions unify),
   but `Installer.install(tests = false)` only returns jars reachable from the real roots, which keeps them out of
   builds and fat jars. The fingerprint is unchanged for projects without dev roots.
+- **Compiler plugins** (`[kotlin] plugins`, `KotlinPlugin`/`PluginConfig`): each plugin is one dependency-free
+  `*-compiler-plugin-embeddable` jar at the Kotlin version. `Toolchain.pluginJars` fetches it into the Maven cache
+  (not locked, like the compiler itself) and `Builder` passes `-Xplugin=<jar>` plus `-P plugin:<id>:annotation=<a>`
+  for both `src/` and `test/`. The plugins and their annotations are part of the build stamp. Presets such as
+  `spring`/`jpa` and the IDE (facet) side are not implemented. `compose` is a named plugin with no options.
+  `[[kotlin.compiler-plugin]]` (`ExternalPlugin`) is the generic form for any other plugin: coordinates plus raw `-P`
+  options. Those artifacts are resolved like normal dependencies and locked (`Manifest.lockRoots`), but
+  `Installer.pluginClasspath` returns only the jars reachable from them (minus kotlin-stdlib and the compiler, which the
+  compiler JVM already has), so they stay off the program classpath. Known limitation: they are resolved together with
+  the real dependencies, so a plugin's transitive dependency can raise the version of a library the program also uses.
+  kapt and KSP are different mechanisms and are not supported.
 - The compiler runs in a **child JVM** on the same `java.home` as skiff, with arguments in
   `target/kotlinc.args` / `target/kotlinc.jvm.args`, which helps with debugging failed builds.
 
@@ -78,5 +89,3 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
 5. **Classifiers and non-jar types** (currently skipped with a warning), and Maven's `<relocation>`.
 6. **Workspaces** (multi-module projects, like Cargo workspaces) and `[scripts]` (like `npm run <script>`).
 7. **Distribution**: `skf self-update`, GraalVM native-image or jlink build, Homebrew/Scoop/winget packages.
-8. Plugins: compiler plugins (`kotlinx-serialization`, `allopen`, `noarg`) via `[kotlin] plugins = [...]`.
-   This matters for real-world use, since serialization is common.
