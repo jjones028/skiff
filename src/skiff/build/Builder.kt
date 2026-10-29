@@ -146,8 +146,10 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         JavaProcess.writeArgFile(kotlincArgFile, kotlincArgs)
 
         val jvmArgs = buildList {
-            // The compiler still uses sun.misc.Unsafe; silence the JDK 24+ deprecation warnings.
+            // The compiler still uses sun.misc.Unsafe; silence the JDK 24+ deprecation warnings,
+            // and Jansi (bundled in the embeddable compiler) loads a native library.
             if (JavaProcess.featureVersion >= 24) add("--sun-misc-unsafe-memory-access=allow")
+            if (JavaProcess.featureVersion >= 24) add("--enable-native-access=ALL-UNNAMED")
             add("-cp"); add(compiler.joinToString(File.pathSeparator))
             add(Toolchain.COMPILER_MAIN_CLASS)
             add("@$kotlincArgFile")

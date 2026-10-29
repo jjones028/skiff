@@ -55,6 +55,7 @@ class AnnotationProcessing(private val manifest: Manifest, private val toolchain
         }
         val jvmArgs = buildList {
             if (JavaProcess.featureVersion >= 24) add("--sun-misc-unsafe-memory-access=allow")
+            if (JavaProcess.featureVersion >= 24) add("--enable-native-access=ALL-UNNAMED")
             add("-cp"); add(toolchain.kspClasspath(config.version).joinToString(File.pathSeparator))
             add(KSP_MAIN_CLASS)
             addAll(kspArgs)
