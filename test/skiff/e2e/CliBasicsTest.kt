@@ -46,6 +46,13 @@ class CliBasicsTest {
     }
 
     @Test
+    fun newWithNoGitSkipsTheRepository() {
+        skf.succeed("new", "plain", "--no-git")
+        assertTrue(Files.isRegularFile(dir.resolve("plain/Skiff.toml")))
+        assertFalse(Files.exists(dir.resolve("plain/.git")))
+    }
+
+    @Test
     fun newCreatesAProjectAndRefusesToOverwriteIt() {
         val created = skf.succeed("new", "hello")
         assertTrue("Created" in created.stderr, created.stderr)
@@ -54,7 +61,8 @@ class CliBasicsTest {
         val manifest = Files.readString(project.resolve("Skiff.toml"))
         assertTrue("name = \"hello\"" in manifest, manifest)
         assertTrue(Files.isRegularFile(project.resolve("src/Main.kt")))
-        assertEquals(listOf("/target", "/.idea", "*.iml", "/workspace.json"), Files.readAllLines(project.resolve(".gitignore")))
+        assertEquals(listOf("/target", "/.idea", "*.iml", "/workspace.json", "/.vscode"), Files.readAllLines(project.resolve(".gitignore")))
+        assertTrue(Files.isDirectory(project.resolve(".git")))
 
         val again = skf.run("new", "hello")
         assertEquals(1, again.exitCode)

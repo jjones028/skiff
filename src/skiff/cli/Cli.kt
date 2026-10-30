@@ -11,6 +11,7 @@ import skiff.maven.ArtifactStore
 import skiff.maven.MavenMetadata
 import skiff.maven.ModuleId
 import skiff.maven.Repository
+import skiff.project.GitRepository
 import skiff.project.IdeaProject
 import skiff.project.Installer
 import skiff.project.Lockfile
@@ -27,6 +28,7 @@ class Cli {
     private var offline = false
     private var locked = false
     private var fat = false
+    private var git = true
 
     fun run(args: List<String>): Int = try {
         dispatch(args)
@@ -47,6 +49,7 @@ class Cli {
                 "--offline" -> offline = true
                 "--locked" -> locked = true
                 "--fat" -> fat = true
+                "--no-git" -> git = false
                 "-h", "--help" -> return help()
                 "-V", "--version" -> return version()
                 else -> throw SkiffException("unknown option '$flag'\n\nRun `skf help` for usage.")
@@ -80,6 +83,7 @@ class Cli {
         val dir = Path.of(name).toAbsolutePath()
         if (Files.exists(dir)) throw SkiffException("destination `$dir` already exists")
         ProjectTemplate.create(dir, dir.fileName.toString())
+        if (git) GitRepository.init(dir)
         Term.status("Created", "application `${dir.fileName}` package")
         return 0
     }
@@ -89,6 +93,7 @@ class Cli {
         if (Files.exists(dir.resolve(Manifest.FILE_NAME))) throw SkiffException("`${Manifest.FILE_NAME}` already exists in $dir")
         val name = dir.fileName.toString().replace(Regex("[^A-Za-z0-9_-]"), "-")
         ProjectTemplate.create(dir, name)
+        if (git) GitRepository.init(dir)
         Term.status("Created", "application `$name` package")
         return 0
     }
@@ -300,6 +305,7 @@ class Cli {
                 --locked           Fail if Skiff.lock would change (for CI)
                 --offline          Use only the local cache
                 --fat              With build: also bundle dependencies into target/<name>-<version>-all.jar
+                --no-git           With new/init: do not create a git repository
                 -h, --help         Show this help
                 -V, --version      Show the version
             """.trimIndent(),
