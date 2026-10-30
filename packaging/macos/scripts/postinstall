@@ -1,0 +1,6 @@
+#!/bin/sh
+# Puts the skf command on PATH: /usr/local/bin is on the default PATH of macOS shells.
+set -e
+mkdir -p /usr/local/bin
+ln -sf /Applications/skf.app/Contents/MacOS/skf /usr/local/bin/skf
+exit 0
