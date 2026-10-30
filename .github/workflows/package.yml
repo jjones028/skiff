@@ -88,12 +88,12 @@ jobs:
           path: dist-in
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
-      - run: packaging/jpackage.sh dmg dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
-      - run: for f in dist/*.dmg; do mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"; done
+      - run: packaging/jpackage.sh pkg dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
+      - run: for f in dist/*.pkg; do mv "$f" "${f%.pkg}-${{ matrix.arch }}.pkg"; done
       - uses: actions/upload-artifact@v4
         with:
           name: installer-macos-${{ matrix.arch }}
-          path: dist/*.dmg
+          path: dist/*.pkg
 
   flatpak:
     needs: version

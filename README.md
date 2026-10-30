@@ -138,8 +138,8 @@ workflow run. Pushing a tag `vX.Y.Z` (it must match the version in `Skiff.toml`)
 
 | Platform | Package | Notes |
 |---|---|---|
-| Windows | `skf-X.Y.Z.msi` | Bundles its own JDK runtime. Installs to `Program Files\skf`; add that folder to `PATH` to use `skf`. |
-| macOS | `skf-X.Y.Z-arm64.dmg`, `skf-X.Y.Z-x64.dmg` | Unsigned, so Gatekeeper asks for confirmation. The command is `/Applications/skf.app/Contents/MacOS/skf`. |
+| Windows | `skf-X.Y.Z.msi` | Bundles its own JDK runtime. Installs to `Program Files\skf` and adds that folder to the system `PATH`; open a new terminal to use `skf`. |
+| macOS | `skf-X.Y.Z-arm64.pkg`, `skf-X.Y.Z-x64.pkg` | Unsigned, so Gatekeeper asks for confirmation (right-click, Open). Installs `skf.app` to `/Applications` and links `skf` into `/usr/local/bin`. |
 | Linux | `skiff-X.Y.Z.flatpak` (x86_64) | `flatpak install skiff-X.Y.Z.flatpak`, then `flatpak run io.github.jjones028.Skiff`. It can read your home directory and use the network. |
 
 The Windows and macOS packages come from `packaging/jpackage.sh` (jlink + jpackage); the Flatpak from

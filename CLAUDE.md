@@ -116,4 +116,4 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
    and `skf publish` (POM generation, sources/javadoc jars, signing).
 5. **Classifiers and non-jar types** (currently skipped with a warning), and Maven's `<relocation>`.
 6. **Workspaces** (multi-module projects, like Cargo workspaces) and `[scripts]` (like `npm run <script>`).
-7. **Distribution**: installers exist (`build.yml` uploads the fat jar, `package.yml` (workflow_run) makes jpackage MSI/DMG and Flatpak from it; unsigned, not on PATH, never run on CI yet). Still open: `skf self-update`, GraalVM native-image or jlink build, Homebrew/Scoop/winget packages.
+7. **Distribution**: installers exist (`build.yml` uploads the fat jar, `package.yml` (workflow_run) makes jpackage MSI, a pkgbuild-based macOS pkg and Flatpak from it; unsigned, put `skf` on PATH, never fully run on CI yet). Still open: `skf self-update`, GraalVM native-image or jlink build, Homebrew/Scoop/winget packages.
