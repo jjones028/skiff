@@ -1,0 +1,140 @@
+name: Package
+
+# Runs after a successful Build of main or of a version tag and turns that build's fat jar into installers.
+# A tag also publishes them as a GitHub release.
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  version:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-tags: true
+      - id: version
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          version=$(grep -m1 '^version' Skiff.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git show-ref --verify --quiet "refs/tags/$HEAD_BRANCH"; then
+            if [ "$HEAD_BRANCH" != "v$version" ]; then
+              echo "tag $HEAD_BRANCH does not match Skiff.toml version $version" >&2
+              exit 1
+            fi
+            echo "tag=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+          fi
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: skiff-jar
+          path: dist-in
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: packaging/jpackage.sh msi dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: dist/*.msi
+
+  macos:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: skiff-jar
+          path: dist-in
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: packaging/jpackage.sh dmg dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
+      - run: for f in dist/*.dmg; do mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos-${{ matrix.arch }}
+          path: dist/*.dmg
+
+  flatpak:
+    needs: version
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: skiff-jar
+          path: dist-in
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - run: cp dist-in/skiff-${{ needs.version.outputs.version }}-all.jar packaging/flatpak/skiff.jar
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: skiff-${{ needs.version.outputs.version }}.flatpak
+          manifest-path: packaging/flatpak/io.github.jjones028.Skiff.yml
+          cache-key: flatpak-builder-${{ github.event.workflow_run.head_sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-flatpak
+          path: skiff-${{ needs.version.outputs.version }}.flatpak
+
+  release:
+    if: needs.version.outputs.tag != ''
+    needs: [version, windows, macos, flatpak]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: installers
+          merge-multiple: true
+      - run: gh release create "$TAG" installers/* --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
