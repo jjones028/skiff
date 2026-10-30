@@ -13,7 +13,8 @@ WORK=$(mktemp -d)
 mkdir -p "$WORK/input" "$OUT"
 cp "$JAR" "$WORK/input/skiff.jar"
 
-jlink --add-modules ALL-MODULE-PATH --strip-debug --no-man-pages --no-header-files --compress zip-6 --output "$WORK/runtime"
+MODULES=$(java --list-modules | sed 's/@.*//' | tr -d '\r' | paste -sd, -)
+jlink --add-modules "$MODULES" --strip-debug --no-man-pages --no-header-files --compress zip-6 --output "$WORK/runtime"
 
 # macOS rejects a major version of 0, so 0.1.0 is packaged as 1.1.0 there.
 case "$TYPE" in
