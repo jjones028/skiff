@@ -50,11 +50,16 @@ $classes = Join-Path $out 'classes'
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 New-Item -ItemType Directory -Force $classes | Out-Null
 
+# JDK 24+ warns about sun.misc.Unsafe use in the compiler; the option does not exist before that.
+$prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+$spec = (& (Join-Path $JavaBin 'java') -XshowSettings:properties -version 2>&1 | Out-String)
+$ErrorActionPreference = $prev
+$unsafeFlag = @(if ($spec -match 'java\.specification\.version = (\d+)' -and [int]$Matches[1] -ge 24) { '--sun-misc-unsafe-memory-access=allow' })
 $sources = Get-ChildItem -Recurse -Filter *.kt (Join-Path $Root 'src') | ForEach-Object { $_.FullName }
 Write-Host "  Compiling skiff ($($sources.Count) files)"
-& (Join-Path $JavaBin 'java') --sun-misc-unsafe-memory-access=allow -cp $compilerClasspath org.jetbrains.kotlin.cli.jvm.K2JVMCompiler `
-    -d $classes -classpath $stdlib -no-stdlib -no-reflect -jvm-target $JvmTarget "-Xjdk-release=$JvmTarget" -module-name skiff @sources 2>&1 |
-    ForEach-Object { Write-Host $_ }
+$javaArgs = $unsafeFlag + @('-cp', $compilerClasspath, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+    '-d', $classes, '-classpath', $stdlib, '-no-stdlib', '-no-reflect', '-jvm-target', $JvmTarget, "-Xjdk-release=$JvmTarget", '-module-name', 'skiff') + $sources
+& (Join-Path $JavaBin 'java') @javaArgs 2>&1 | ForEach-Object { Write-Host $_ }
 if ($LASTEXITCODE -ne 0) { throw 'compilation failed' }
 
 # Bundle the Kotlin stdlib so `java -jar skiff.jar` works on its own.

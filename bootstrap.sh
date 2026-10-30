@@ -50,9 +50,14 @@ CLASSES="$OUT/classes"
 rm -rf "$OUT"
 mkdir -p "$CLASSES"
 
+# JDK 24+ warns about sun.misc.Unsafe use in the compiler; the option does not exist before that.
+JAVA_FEATURE=$("${JAVA_BIN}java" -XshowSettings:properties -version 2>&1 | sed -n 's/.*java.specification.version = \([0-9]*\).*/\1/p')
+UNSAFE_FLAG=""
+if [ "${JAVA_FEATURE:-0}" -ge 24 ]; then UNSAFE_FLAG="--sun-misc-unsafe-memory-access=allow"; fi
+
 echo "  Compiling skiff"
 find "$ROOT/src" -name '*.kt' > "$OUT/sources.txt"
-"${JAVA_BIN}java" --sun-misc-unsafe-memory-access=allow -cp "$COMPILER_CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
+"${JAVA_BIN}java" $UNSAFE_FLAG -cp "$COMPILER_CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
     -d "$CLASSES" -classpath "$STDLIB" -no-stdlib -no-reflect -jvm-target "$JVM_TARGET" "-Xjdk-release=$JVM_TARGET" \
     -module-name skiff "@$OUT/sources.txt"
 
