@@ -5,7 +5,7 @@
 set -eu
 
 KOTLIN_VERSION=2.4.21
-JVM_TARGET=21
+JVM_TARGET=25
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 CACHE="${SKIFF_HOME:-$HOME/.skiff}/cache/maven"
 CENTRAL=https://repo.maven.apache.org/maven2

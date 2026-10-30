@@ -8,6 +8,6 @@ main = "skiff.MainKt"
 
 [kotlin]
 version = "2.4.21"
-jvm-target = "21"
+jvm-target = "25"
 
 [dependencies]

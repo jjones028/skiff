@@ -4,7 +4,7 @@
 $ErrorActionPreference = 'Stop'
 
 $KotlinVersion = '2.4.21'
-$JvmTarget = '21'
+$JvmTarget = '25'
 $Root = $PSScriptRoot
 $SkiffHome = if ($env:SKIFF_HOME) { $env:SKIFF_HOME } else { Join-Path $HOME '.skiff' }
 $Cache = Join-Path $SkiffHome 'cache/maven'
@@ -52,9 +52,9 @@ New-Item -ItemType Directory -Force $classes | Out-Null
 
 $sources = Get-ChildItem -Recurse -Filter *.kt (Join-Path $Root 'src') | ForEach-Object { $_.FullName }
 Write-Host "  Compiling skiff ($($sources.Count) files)"
-& (Join-Path $JavaBin 'java') --sun-misc-unsafe-memory-access=allow -cp $compilerClasspath org.jetbrains.kotlin.cli.jvm.K2JVMCompiler `
-    -d $classes -classpath $stdlib -no-stdlib -no-reflect -jvm-target $JvmTarget "-Xjdk-release=$JvmTarget" -module-name skiff @sources 2>&1 |
-    ForEach-Object { Write-Host $_ }
+$javaArgs = @('--sun-misc-unsafe-memory-access=allow', '-cp', $compilerClasspath, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+    '-d', $classes, '-classpath', $stdlib, '-no-stdlib', '-no-reflect', '-jvm-target', $JvmTarget, "-Xjdk-release=$JvmTarget", '-module-name', 'skiff') + $sources
+& (Join-Path $JavaBin 'java') @javaArgs 2>&1 | ForEach-Object { Write-Host $_ }
 if ($LASTEXITCODE -ne 0) { throw 'compilation failed' }
 
 # Bundle the Kotlin stdlib so `java -jar skiff.jar` works on its own.

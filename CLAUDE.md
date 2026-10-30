@@ -11,8 +11,8 @@ simple projects. User-facing docs are in README.md; this file records design dec
   means the bootstrap scripts must download it too, so avoid that.
 - **One top-level class/object per file**, file named after it. Nested types are fine.
 - Skiff must stay **self-hosting**: `bin/skf build --fat` in this repo must keep working.
-- Runs on JDK 21+ (`jvm-target = "21"`, compiled with `-Xjdk-release=21`, so don't use JDK 22+ APIs
-  without reflection; see `Term.isTerminal`).
+- Runs on JDK 25+ (`jvm-target = "25"`, compiled with `-Xjdk-release=25`, so don't use JDK 26+ APIs
+  without reflection).
 - Cargo is the UX model: status lines are a right-aligned green verb on stderr (`Term.status`),
   program output goes to stdout, and errors are `SkiffException` (message shown, no stack trace, exit 1).
 

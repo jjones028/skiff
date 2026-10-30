@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /app/jre/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC $SKIFF_JAVA_OPTS -jar /app/share/skiff/skiff.jar "$@"
