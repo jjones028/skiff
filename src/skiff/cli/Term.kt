@@ -19,13 +19,6 @@ object Term {
     private fun paint(text: String, code: String): String =
         if (color) "\u001b[${code}m$text\u001b[0m" else text
 
-    private fun isTerminal(): Boolean {
-        val console = System.console() ?: return false
-        // Console.isTerminal() only exists on JDK 22+, where System.console() is non-null even when redirected.
-        return try {
-            console.javaClass.getMethod("isTerminal").invoke(console) as Boolean
-        } catch (e: NoSuchMethodException) {
-            true
-        }
-    }
+    // System.console() is non-null even when redirected on JDK 22+, so ask it directly.
+    private fun isTerminal(): Boolean = System.console()?.isTerminal ?: false
 }
