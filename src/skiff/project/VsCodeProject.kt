@@ -87,6 +87,7 @@ object VsCodeProject {
         val srcDir = manifest.dir.resolve("src")
         if (Files.exists(launch) || !Files.isDirectory(srcDir)) return
         val sources = Files.walk(srcDir).use { paths -> paths.filter { it.toString().endsWith(".kt") }.toList() }
+        val mainFile = MainClassDetector.findFile(srcDir, sources) ?: return
         val mainClass = MainClassDetector.detect(srcDir, sources) ?: return
         val exe = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
         val config = linkedMapOf<String, Any?>(
@@ -97,6 +98,8 @@ object VsCodeProject {
                     "request" to "launch",
                     "name" to manifest.name,
                     "mainClass" to mainClass,
+                    // File facade classes such as MainKt do not exist until compiled, so name the declaring source.
+                    "file" to slashes(mainFile),
                     "javaExec" to slashes(Path.of(System.getProperty("java.home")).resolve("bin").resolve(exe)),
                     "classPaths" to listOf(slashes(manifest.dir.resolve("target/classes"))) + runtimeJars.distinct().map(::slashes),
                     "preLaunchTask" to BUILD_TASK,
