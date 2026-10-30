@@ -38,7 +38,7 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
 | `cli` | `Cli` parses args and dispatches commands; `Term` does Cargo-style output |
 | `toml`, `json` | Minimal parsers (TOML subset without dates; JSON for Gradle `.module` files) |
 | `maven` | `ArtifactStore` (HTTP + `~/.skiff/cache/maven`, sha1-verified), `Pom`/`PomResolver` (parents, `${}` interpolation, dependencyManagement + BOM imports), `DependencyResolver` (graph walk), `Version`/`VersionRange`, `MavenMetadata` (latest/ranges), `GradleModule` (KMP JVM redirect) |
-| `project` | `Manifest` (Skiff.toml), `ManifestEditor` (text edits that keep comments), `Lockfile`/`LockedPackage`, `Installer` (manifest -> lock -> jars), `IdeaProject` (`skf idea`: generated, git-ignored IntelliJ module), `ProjectTemplate` |
+| `project` | `Manifest` (Skiff.toml), `ManifestEditor` (text edits that keep comments), `Lockfile`/`LockedPackage`, `Installer` (manifest -> lock -> jars), `IdeaProject` (`skf idea`: generated, git-ignored IntelliJ module), `VsCodeProject` (`skf vscode`: `workspace.json` for kotlin-lsp's JSON import, schema from its `model.kt`; not yet verified in a live VS Code), `ProjectTemplate` |
 | `build` | `Toolchain` (resolves `kotlin-compiler-embeddable` like any other dependency, caches its classpath in `~/.skiff/toolchains`), `Builder` (child JVM running `K2JVMCompiler` via argfiles, then jar), `JarWriter`, `MainClassDetector`, `Runner`, `JavaProcess` |
 
 ### Key decisions
@@ -96,6 +96,9 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
   roots with `generated="true"` and are created up front so the IDE picks them up. The format was checked by feeding
   the generated `<configuration>` to IntelliJ's own `FacetSerializationKt.deserializeFacetSettings` (from the
   installed Kotlin plugin); `IdeaProjectFacetTest` checks it structurally.
+- **Editor sync**: `Cli.syncEditors` regenerates the IDEA module and `workspace.json` after `add`/`remove`/`install`/`update`
+  (and after `build`/`run`/`test` when the lockfile changed), but only for files that already exist, so projects that
+  never ran `skf idea`/`skf vscode` get nothing written. Any new command that changes the manifest or lock should call it.
 - The compiler runs in a **child JVM** on the same `java.home` as skiff, with arguments in
   `target/kotlinc.args` / `target/kotlinc.jvm.args`, which helps with debugging failed builds.
 
@@ -113,4 +116,4 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
    and `skf publish` (POM generation, sources/javadoc jars, signing).
 5. **Classifiers and non-jar types** (currently skipped with a warning), and Maven's `<relocation>`.
 6. **Workspaces** (multi-module projects, like Cargo workspaces) and `[scripts]` (like `npm run <script>`).
-7. **Distribution**: `skf self-update`, GraalVM native-image or jlink build, Homebrew/Scoop/winget packages.
+7. **Distribution**: installers exist (`build.yml` uploads the fat jar, `package.yml` (workflow_run) makes jpackage MSI/DMG and Flatpak from it; unsigned, not on PATH, never run on CI yet). Still open: `skf self-update`, GraalVM native-image or jlink build, Homebrew/Scoop/winget packages.

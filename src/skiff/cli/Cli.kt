@@ -17,6 +17,7 @@ import skiff.project.Lockfile
 import skiff.project.Manifest
 import skiff.project.ManifestEditor
 import skiff.project.ProjectTemplate
+import skiff.project.VsCodeProject
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -64,6 +65,7 @@ class Cli {
             "run", "r" -> runProject(params + passthrough)
             "test", "t" -> test(passthrough)
             "idea" -> idea()
+            "vscode" -> vscode()
             "tree" -> tree()
             "classpath" -> classpath()
             "clean" -> clean()
@@ -105,7 +107,9 @@ class Cli {
         }
         Files.writeString(manifest.file, text)
         manifest = Manifest.load(manifest.dir)
-        Installer(manifest, store).install(locked = locked)
+        val installer = Installer(manifest, store)
+        installer.install(locked = locked)
+        syncEditors(manifest, store, installer)
         return 0
     }
 
@@ -121,14 +125,20 @@ class Cli {
         }
         Files.writeString(manifest.file, text)
         manifest = Manifest.load(manifest.dir)
-        Installer(manifest, store(manifest)).install(locked = locked)
+        val store = store(manifest)
+        val installer = Installer(manifest, store)
+        installer.install(locked = locked)
+        syncEditors(manifest, store, installer)
         return 0
     }
 
     private fun install(update: Boolean): Int {
         val manifest = project()
-        val classpath = Installer(manifest, store(manifest)).install(update = update, locked = locked)
+        val store = store(manifest)
+        val installer = Installer(manifest, store)
+        val classpath = installer.install(update = update, locked = locked)
         Term.status("Installed", "${classpath.size} jars")
+        syncEditors(manifest, store, installer)
         return 0
     }
 
@@ -136,7 +146,7 @@ class Cli {
         val manifest = project()
         val store = store(manifest)
         val installer = Installer(manifest, store)
-        val classpath = installer.install(locked = locked)
+        val classpath = installAndSync(manifest, store, installer)
         Builder(manifest, Toolchain(store)).build(classpath, fatJar = fat, pluginClasspath = installer.pluginClasspath(locked), processors = processors(installer))
         return 0
     }
@@ -145,7 +155,7 @@ class Cli {
         val manifest = project()
         val store = store(manifest)
         val installer = Installer(manifest, store)
-        val classpath = installer.install(locked = locked)
+        val classpath = installAndSync(manifest, store, installer)
         val result = Builder(manifest, Toolchain(store)).build(classpath, pluginClasspath = installer.pluginClasspath(locked), processors = processors(installer))
         return Runner.run(manifest, result, classpath, args)
     }
@@ -157,7 +167,7 @@ class Cli {
         val installer = Installer(manifest, store)
         val builder = Builder(manifest, Toolchain(store))
         val pluginClasspath = installer.pluginClasspath(locked)
-        val mainBuild = builder.build(installer.install(locked = locked), pluginClasspath = pluginClasspath, processors = processors(installer))
+        val mainBuild = builder.build(installAndSync(manifest, store, installer), pluginClasspath = pluginClasspath, processors = processors(installer))
         val classpath = installer.install(locked = locked, tests = true)
         val testClasses = builder.buildTests(mainBuild, classpath, pluginClasspath)
         return TestRunner.run(manifest, mainBuild, testClasses, classpath, args)
@@ -166,12 +176,7 @@ class Cli {
     private fun idea(): Int {
         val manifest = project()
         val store = store(manifest)
-        val installer = Installer(manifest, store)
-        val runtimeJars = installer.install(locked = locked)
-        val testJars = installer.install(locked = locked, tests = true)
-        val pluginJars = Toolchain(store).pluginJars(manifest.kotlinVersion, manifest.plugins.map { it.plugin }) +
-            installer.pluginClasspath(locked)
-        val written = IdeaProject.generate(manifest, runtimeJars, testJars, pluginJars)
+        val written = generateIdea(manifest, store, Installer(manifest, store))
         Term.status("Generated", written.joinToString(", ") { manifest.dir.relativize(it).toString() })
         val generatedDirs = IdeaProject.generatedSourceDirs(manifest)
         if (generatedDirs.isNotEmpty() && generatedDirs.none { hasFiles(manifest.dir.resolve(it)) }) {
@@ -179,6 +184,46 @@ class Cli {
         }
         Term.status("Note", "open the project in IntelliJ IDEA and pick a JDK; these files are machine-specific, do not commit them")
         return 0
+    }
+
+    private fun vscode(): Int {
+        val manifest = project()
+        val store = store(manifest)
+        val file = generateVsCode(manifest, Installer(manifest, store))
+        Term.status("Generated", manifest.dir.relativize(file).toString())
+        Term.status("Note", "for the Kotlin by JetBrains extension (reload the window to pick it up); this file is machine-specific, do not commit it")
+        return 0
+    }
+
+    private fun generateIdea(manifest: Manifest, store: ArtifactStore, installer: Installer): List<Path> {
+        val runtimeJars = installer.install(locked = locked)
+        val testJars = installer.install(locked = locked, tests = true)
+        val pluginJars = Toolchain(store).pluginJars(manifest.kotlinVersion, manifest.plugins.map { it.plugin }) +
+            installer.pluginClasspath(locked)
+        return IdeaProject.generate(manifest, runtimeJars, testJars, pluginJars)
+    }
+
+    private fun generateVsCode(manifest: Manifest, installer: Installer): Path =
+        VsCodeProject.generate(manifest, installer.install(locked = locked), installer.install(locked = locked, tests = true))
+
+    /** Installs, then refreshes the editor files if the lockfile changed (`build`, `run` and `test` may re-resolve). */
+    private fun installAndSync(manifest: Manifest, store: ArtifactStore, installer: Installer): List<Path> {
+        val before = if (Files.exists(manifest.lockFile)) Files.readAllBytes(manifest.lockFile) else null
+        val classpath = installer.install(locked = locked)
+        val after = if (Files.exists(manifest.lockFile)) Files.readAllBytes(manifest.lockFile) else null
+        if (!before.contentEquals(after)) syncEditors(manifest, store, installer)
+        return classpath
+    }
+
+    /** Regenerates the IDEA and VS Code files, but only those the user has already generated with `skf idea` / `skf vscode`. */
+    private fun syncEditors(manifest: Manifest, store: ArtifactStore, installer: Installer) {
+        if (Files.isRegularFile(manifest.dir.resolve("${manifest.name}.iml"))) {
+            val written = generateIdea(manifest, store, installer)
+            Term.status("Updated", written.joinToString(", ") { manifest.dir.relativize(it).toString() })
+        }
+        if (VsCodeProject.isGenerated(manifest)) {
+            Term.status("Updated", manifest.dir.relativize(generateVsCode(manifest, installer)).toString())
+        }
     }
 
     private fun hasFiles(dir: Path): Boolean =
@@ -249,6 +294,7 @@ class Cli {
                 classpath          Print the dependency classpath
                 clean              Delete the target directory
                 idea               Generate IntelliJ IDEA project files (module + libraries)
+                vscode             Generate workspace.json for the Kotlin by JetBrains VS Code extension
 
             Options:
                 --locked           Fail if Skiff.lock would change (for CI)

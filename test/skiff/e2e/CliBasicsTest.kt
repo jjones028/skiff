@@ -54,7 +54,7 @@ class CliBasicsTest {
         val manifest = Files.readString(project.resolve("Skiff.toml"))
         assertTrue("name = \"hello\"" in manifest, manifest)
         assertTrue(Files.isRegularFile(project.resolve("src/Main.kt")))
-        assertEquals(listOf("/target", "/.idea", "*.iml"), Files.readAllLines(project.resolve(".gitignore")))
+        assertEquals(listOf("/target", "/.idea", "*.iml", "/workspace.json"), Files.readAllLines(project.resolve(".gitignore")))
 
         val again = skf.run("new", "hello")
         assertEquals(1, again.exitCode)

@@ -113,7 +113,8 @@ once and the IDE can see (and navigate into) the generated code.
 | `skf test [-- args]` | Compile `test/` and run it with JUnit 5 (kotlin-test is included; args go to the JUnit console launcher) |
 | `skf tree` | Dependency tree |
 | `skf classpath` | Print the dependency classpath (for IDEs/scripts) |
-| `skf idea` | Generate IntelliJ IDEA project files: sources, libraries, Kotlin language level, compiler plugins and generated sources (git-ignored; re-run after changing dependencies or plugins) |
+| `skf vscode` | Generate `workspace.json` for the Kotlin by JetBrains VS Code extension (source roots, jars and JDK; git-ignored; compiler plugins and `jvm-target` are not passed on) |
+| `skf idea` | Generate IntelliJ IDEA project files: sources, libraries, Kotlin language level, compiler plugins and generated sources (git-ignored; once generated, `add`, `remove`, `install`, `update` and any build that re-resolves refresh them) |
 | `skf clean` | Delete `target/` |
 
 Global flags: `--locked` (fail if `Skiff.lock` would change, for CI), `--offline` (local cache only).
@@ -128,5 +129,20 @@ Requires JDK 21+.
 
 This writes `bin/skiff.jar`. Put `bin/` on your `PATH` and use `skf` (`skf.cmd` on Windows).
 Once bootstrapped, skiff builds itself: `skf build --fat`, then copy `target/skiff-0.1.0-all.jar` to `bin/skiff.jar`.
+
+### Installer packages
+
+Every push runs `.github/workflows/build.yml` (build, tests, fat jar). When that succeeds for `main` or a version tag,
+`.github/workflows/package.yml` turns the build's fat jar into the installers below, which you can download from the
+workflow run. Pushing a tag `vX.Y.Z` (it must match the version in `Skiff.toml`) also attaches them to a GitHub release.
+
+| Platform | Package | Notes |
+|---|---|---|
+| Windows | `skf-X.Y.Z.msi` | Bundles its own JDK runtime. Installs to `Program Files\skf`; add that folder to `PATH` to use `skf`. |
+| macOS | `skf-X.Y.Z-arm64.dmg`, `skf-X.Y.Z-x64.dmg` | Unsigned, so Gatekeeper asks for confirmation. The command is `/Applications/skf.app/Contents/MacOS/skf`. |
+| Linux | `skiff-X.Y.Z.flatpak` (x86_64) | `flatpak install skiff-X.Y.Z.flatpak`, then `flatpak run io.github.jjones028.Skiff`. It can read your home directory and use the network. |
+
+The Windows and macOS packages come from `packaging/jpackage.sh` (jlink + jpackage); the Flatpak from
+`packaging/flatpak/`. macOS packages are versioned 1.x.y while skiff is below 1.0, because macOS rejects a major version of 0.
 
 Downloads are cached in `~/.skiff` (override with `SKIFF_HOME`).
