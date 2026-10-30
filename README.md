@@ -29,7 +29,7 @@ main = "com.example.MainKt"   # optional; detected from `fun main` (prefers Main
 
 [kotlin]
 version = "2.4.21"            # skiff downloads this compiler version
-jvm-target = "21"
+jvm-target = "25"
 plugins = ["serialization", "allopen"]   # optional compiler plugins, see below
 
 [kotlin.allopen]              # allopen, noarg and sam-with-receiver need annotations
@@ -121,7 +121,7 @@ Global flags: `--locked` (fail if `Skiff.lock` would change, for CI), `--offline
 
 ## Installing skiff
 
-Requires JDK 21+.
+Requires JDK 25+.
 
 ```bash
 ./bootstrap.sh          # or: pwsh ./bootstrap.ps1

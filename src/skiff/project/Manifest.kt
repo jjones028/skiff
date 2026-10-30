@@ -72,7 +72,7 @@ data class Manifest(
     companion object {
         const val FILE_NAME = "Skiff.toml"
         const val DEFAULT_KOTLIN_VERSION = "2.4.21"
-        const val DEFAULT_JVM_TARGET = "21"
+        const val DEFAULT_JVM_TARGET = "25"
         /** The lockfile configuration of the `[[kotlin.compiler-plugin]]` artifacts. */
         const val PLUGINS = "plugins"
 

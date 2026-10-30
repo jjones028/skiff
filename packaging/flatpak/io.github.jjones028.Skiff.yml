@@ -1,10 +1,10 @@
 # Built by .github/workflows/release.yml, which first copies the fat jar next to this file as skiff.jar.
 app-id: io.github.jjones028.Skiff
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
+runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.openjdk21
+  - org.freedesktop.Sdk.Extension.openjdk25
 command: skf
 finish-args:
   - --share=network
@@ -13,7 +13,7 @@ modules:
   - name: openjdk
     buildsystem: simple
     build-commands:
-      - /usr/lib/sdk/openjdk21/installjdk.sh
+      - /usr/lib/sdk/openjdk25/installjdk.sh
   - name: skiff
     buildsystem: simple
     build-commands:
