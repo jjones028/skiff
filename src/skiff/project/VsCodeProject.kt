@@ -14,6 +14,7 @@ import java.nio.file.Path
  */
 object VsCodeProject {
     const val FILE_NAME = "workspace.json"
+    private const val BUILD_TASK = "skf: build"
 
     fun workspaceFile(manifest: Manifest): Path = manifest.dir.resolve(FILE_NAME)
 
@@ -70,15 +71,18 @@ object VsCodeProject {
         )
         val file = workspaceFile(manifest)
         Files.writeString(file, JsonWriter.write(workspace))
-        writeLaunchConfig(manifest)
+        writeLaunchConfig(manifest, runtime)
+        writeBuildTask(manifest)
         return file
     }
 
     /**
      * Writes `.vscode/launch.json` once (never overwrites a user's file). The debugger refuses to start with "No JDK
      * configured for the project" when it cannot resolve the module SDK, so `javaExec` pins the JDK skiff itself runs on.
+     * The model has no compiler output directory, so `classPaths` names `target/classes` and the locked jars, and the
+     * `skf: build` task compiles first.
      */
-    private fun writeLaunchConfig(manifest: Manifest) {
+    private fun writeLaunchConfig(manifest: Manifest, runtimeJars: List<Path>) {
         val launch = manifest.dir.resolve(".vscode/launch.json")
         val srcDir = manifest.dir.resolve("src")
         if (Files.exists(launch) || !Files.isDirectory(srcDir)) return
@@ -94,11 +98,27 @@ object VsCodeProject {
                     "name" to manifest.name,
                     "mainClass" to mainClass,
                     "javaExec" to slashes(Path.of(System.getProperty("java.home")).resolve("bin").resolve(exe)),
+                    "classPaths" to listOf(slashes(manifest.dir.resolve("target/classes"))) + runtimeJars.distinct().map(::slashes),
+                    "preLaunchTask" to BUILD_TASK,
                 ),
             ),
         )
         Files.createDirectories(launch.parent)
         Files.writeString(launch, JsonWriter.write(config))
+    }
+
+    /** Writes `.vscode/tasks.json` once, with the `skf build` task the launch configuration runs first. */
+    private fun writeBuildTask(manifest: Manifest) {
+        val tasks = manifest.dir.resolve(".vscode/tasks.json")
+        if (Files.exists(tasks) || !Files.isDirectory(manifest.dir.resolve("src"))) return
+        val config = linkedMapOf<String, Any?>(
+            "version" to "2.0.0",
+            "tasks" to listOf(
+                linkedMapOf("label" to BUILD_TASK, "type" to "shell", "command" to "skf build", "problemMatcher" to emptyList<Any>()),
+            ),
+        )
+        Files.createDirectories(tasks.parent)
+        Files.writeString(tasks, JsonWriter.write(config))
     }
 
     private fun sourceRoot(path: String, type: String, generated: Boolean = false): Map<String, Any?> =

@@ -58,6 +58,10 @@ class VsCodeProjectTest {
         val entry = config.single() as Map<*, *>
         assertEquals("MainKt", entry["mainClass"])
         assertTrue((entry["javaExec"] as String).contains("java"))
+        assertEquals(listOf(dir.resolve("target/classes").toString().replace('\\', '/')), entry["classPaths"])
+        assertEquals("skf: build", entry["preLaunchTask"])
+        val task = ((JsonParser(Files.readString(dir.resolve(".vscode/tasks.json"))).parse() as Map<*, *>)["tasks"] as List<*>).single() as Map<*, *>
+        assertEquals("skf: build", task["label"])
 
         Files.writeString(launch, "custom")
         VsCodeProject.generate(manifest, emptyList(), emptyList())
