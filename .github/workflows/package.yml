@@ -2,10 +2,13 @@ name: Package
 
 # Runs after a successful Build of main or of a version tag and turns that build's fat jar into installers.
 # A tag also publishes them as a GitHub release.
+# Run manually (Actions tab or `gh workflow run Package --ref <branch>`), it builds the fat jar of the chosen ref itself
+# and uploads the installers as artifacts, without publishing a release.
 on:
   workflow_run:
     workflows: [Build]
     types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,9 +17,10 @@ permissions:
 jobs:
   version:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v'))
+      (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v')))
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -24,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-tags: true
       - id: version
         env:
@@ -32,13 +36,27 @@ jobs:
         run: |
           version=$(grep -m1 '^version' Skiff.toml | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git show-ref --verify --quiet "refs/tags/$HEAD_BRANCH"; then
+          if [ -n "$HEAD_BRANCH" ] && git show-ref --verify --quiet "refs/tags/$HEAD_BRANCH"; then
             if [ "$HEAD_BRANCH" != "v$version" ]; then
               echo "tag $HEAD_BRANCH does not match Skiff.toml version $version" >&2
               exit 1
             fi
             echo "tag=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
           fi
+      # Manual runs have no Build run to take the jar from, so build it here.
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - if: github.event_name == 'workflow_dispatch'
+        run: ./bootstrap.sh && bin/skf build --fat
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: skiff-jar
+          path: target/skiff-*-all.jar
+          if-no-files-found: error
 
   windows:
     needs: version
@@ -46,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: zulu
@@ -55,7 +73,7 @@ jobs:
         with:
           name: skiff-jar
           path: dist-in
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id || github.run_id }}
           github-token: ${{ github.token }}
       - run: packaging/jpackage.sh msi dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
         shell: bash
@@ -77,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: zulu
@@ -86,7 +104,7 @@ jobs:
         with:
           name: skiff-jar
           path: dist-in
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id || github.run_id }}
           github-token: ${{ github.token }}
       - run: packaging/jpackage.sh pkg dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
       - run: for f in dist/*.pkg; do mv "$f" "${f%.pkg}-${{ matrix.arch }}.pkg"; done
@@ -104,19 +122,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/download-artifact@v4
         with:
           name: skiff-jar
           path: dist-in
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id || github.run_id }}
           github-token: ${{ github.token }}
       - run: cp dist-in/skiff-${{ needs.version.outputs.version }}-all.jar packaging/flatpak/skiff.jar
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: skiff-${{ needs.version.outputs.version }}.flatpak
           manifest-path: packaging/flatpak/io.github.jjones028.Skiff.yml
-          cache-key: flatpak-builder-${{ github.event.workflow_run.head_sha }}
+          cache-key: flatpak-builder-${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/upload-artifact@v4
         with:
           name: installer-flatpak
