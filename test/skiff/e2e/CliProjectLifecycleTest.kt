@@ -113,8 +113,14 @@ class CliProjectLifecycleTest {
         assertTrue(Regex("scope=\"TEST\">\\s*<library name=\"junit-platform-console").containsMatchIn(module), module)
         assertFalse(Regex("scope=\"TEST\">\\s*<library name=\"gson").containsMatchIn(module))
 
-        // Remove the dependency again: the lockfile forgets it.
+        // Once generated, the editor files follow dependency changes.
+        app.succeed("vscode")
+        assertTrue("gson-2.11.0.jar" in Files.readString(project.resolve("workspace.json")))
+
+        // Remove the dependency again: the lockfile forgets it, and so do the editor files.
         app.succeed("remove", "com.google.code.gson:gson")
+        assertFalse("gson" in Files.readString(project.resolve("app.iml")))
+        assertFalse("gson" in Files.readString(project.resolve("workspace.json")))
         assertFalse("gson" in Files.readString(project.resolve("Skiff.toml")))
         assertFalse("gson" in Files.readString(project.resolve("Skiff.lock")))
     }

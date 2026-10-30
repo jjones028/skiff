@@ -33,7 +33,7 @@ object ProjectTemplate {
                 """.trimIndent(),
             )
         }
-        writeIfAbsent(dir.resolve(".gitignore"), "/target\n/.idea\n*.iml\n")
+        writeIfAbsent(dir.resolve(".gitignore"), "/target\n/.idea\n*.iml\n/workspace.json\n")
     }
 
     private fun writeIfAbsent(file: Path, content: String) {
