@@ -57,6 +57,7 @@ class VsCodeProjectTest {
         val config = (JsonParser(Files.readString(launch)).parse() as Map<*, *>)["configurations"] as List<*>
         val entry = config.single() as Map<*, *>
         assertEquals("MainKt", entry["mainClass"])
+        assertEquals(dir.resolve("src/Main.kt").toString().replace('\\', '/'), entry["file"])
         assertTrue((entry["javaExec"] as String).contains("java"))
         assertEquals(listOf(dir.resolve("target/classes").toString().replace('\\', '/')), entry["classPaths"])
         assertEquals("skf: build", entry["preLaunchTask"])

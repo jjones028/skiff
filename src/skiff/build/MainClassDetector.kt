@@ -12,11 +12,14 @@ object MainClassDetector {
     private val MAIN_FUNCTION = Regex("""^fun\s+main\s*\(""", RegexOption.MULTILINE)
     private val JVM_NAME = Regex("""@file:JvmName\(\s*"([^"]+)"\s*\)""")
 
-    fun detect(sourceDir: Path, sources: List<Path>): String? {
-        val candidates = sources.filter { MAIN_FUNCTION.containsMatchIn(Files.readString(it)) }
-        val chosen = candidates
+    /** The source file holding the main function, or null. */
+    fun findFile(sourceDir: Path, sources: List<Path>): Path? =
+        sources.filter { MAIN_FUNCTION.containsMatchIn(Files.readString(it)) }
             .sortedWith(compareBy({ !it.fileName.toString().equals("Main.kt", ignoreCase = true) }, { sourceDir.relativize(it).nameCount }))
-            .firstOrNull() ?: return null
+            .firstOrNull()
+
+    fun detect(sourceDir: Path, sources: List<Path>): String? {
+        val chosen = findFile(sourceDir, sources) ?: return null
         val text = Files.readString(chosen)
         val packageName = PACKAGE.find(text)?.groupValues?.get(1)
         val className = JVM_NAME.find(text)?.groupValues?.get(1)
