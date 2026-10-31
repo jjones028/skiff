@@ -7,6 +7,32 @@ package skiff.json
 object JsonWriter {
     fun write(value: Any?): String = buildString { append(value, 0) }.plus("\n")
 
+    /** One line without whitespace, for streams of JSON objects (one per line). */
+    fun writeCompact(value: Any?): String = buildString { appendCompact(value) }
+
+    private fun StringBuilder.appendCompact(value: Any?) {
+        when (value) {
+            is Map<*, *> -> {
+                append('{')
+                value.entries.forEachIndexed { i, (k, v) ->
+                    if (i > 0) append(',')
+                    appendString(k.toString()).append(':')
+                    appendCompact(v)
+                }
+                append('}')
+            }
+            is List<*> -> {
+                append('[')
+                value.forEachIndexed { i, v ->
+                    if (i > 0) append(',')
+                    appendCompact(v)
+                }
+                append(']')
+            }
+            else -> append(value, 0)
+        }
+    }
+
     private fun StringBuilder.append(value: Any?, depth: Int) {
         when (value) {
             null -> append("null")

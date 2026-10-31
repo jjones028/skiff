@@ -55,12 +55,23 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
     }
 
     private fun jars(lock: Lockfile, roots: Collection<ModuleId>): List<Path> {
-        val needed = reachable(lock, roots)
+        val needed = lock.reachable(roots)
         return verifiedJars(lock.packages.filter { it.module in needed })
     }
 
+    /**
+     * The up-to-date lockfile (including the dev-dependencies) with the verified jar of every package that has one,
+     * for `skf metadata`.
+     */
+    fun lockedJars(locked: Boolean = false): Pair<Lockfile, Map<ModuleId, Path>> {
+        val lock = lock(update = false, locked = locked)
+        return lock to jarsByModule(lock.packages)
+    }
+
+    private fun verifiedJars(packages: List<LockedPackage>): List<Path> = jarsByModule(packages).values.toList()
+
     /** Downloads the jars of [packages] if needed and checks them against the locked checksums. */
-    private fun verifiedJars(packages: List<LockedPackage>): List<Path> {
+    private fun jarsByModule(packages: List<LockedPackage>): Map<ModuleId, Path> {
         val jars = store.getAll(packages.filter { it.sha256 != null }.map { it.jarPath })
         return packages.mapNotNull { pkg ->
             val expected = pkg.sha256 ?: return@mapNotNull null
@@ -72,19 +83,8 @@ class Installer(private val manifest: Manifest, private val store: ArtifactStore
                         "  expected $expected\n  found    $actual ($jar)",
                 )
             }
-            jar
-        }
-    }
-
-    private fun reachable(lock: Lockfile, roots: Collection<ModuleId>): Set<ModuleId> {
-        val byModule = lock.packages.associateBy { it.module }
-        val seen = LinkedHashSet<ModuleId>()
-        val queue = ArrayDeque(roots)
-        while (queue.isNotEmpty()) {
-            val module = queue.removeFirst()
-            if (byModule.containsKey(module) && seen.add(module)) queue += byModule.getValue(module).dependencies
-        }
-        return seen
+            pkg.module to jar
+        }.toMap()
     }
 
     private fun resolve(fingerprint: String, previous: Lockfile?): Lockfile {

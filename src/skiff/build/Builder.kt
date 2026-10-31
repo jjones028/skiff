@@ -14,7 +14,12 @@ import kotlin.io.path.invariantSeparatorsPathString
  * Compiles `src/` with the Kotlin compiler (in a child JVM), copies `resources/`, and writes
  * `target/<name>-<version>.jar`. Skips everything when nothing that affects the output has changed.
  */
-class Builder(private val manifest: Manifest, private val toolchain: Toolchain) {
+class Builder(
+    private val manifest: Manifest,
+    private val toolchain: Toolchain,
+    /** When set, compiler messages go here (and to stderr in plain form) instead of being printed by the compiler. */
+    private val onDiagnostic: ((Diagnostic) -> Unit)? = null,
+) {
     fun build(
         classpath: List<Path>,
         fatJar: Boolean = false,
@@ -146,6 +151,7 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
         JavaProcess.writeArgFile(kotlincArgFile, kotlincArgs)
 
         val jvmArgs = buildList {
+            if (onDiagnostic != null) add(CompilerMessages.RENDERER_PROPERTY)
             // The compiler still uses sun.misc.Unsafe; silence the JDK 24+ deprecation warnings,
             // and Jansi (bundled in the embeddable compiler) loads a native library.
             if (JavaProcess.featureVersion >= 24) add("--sun-misc-unsafe-memory-access=allow")
@@ -154,7 +160,15 @@ class Builder(private val manifest: Manifest, private val toolchain: Toolchain) 
             add(Toolchain.COMPILER_MAIN_CLASS)
             add("@$kotlincArgFile")
         }
-        val exitCode = JavaProcess.run(jvmArgs, target.resolve("$argFileName.jvm.args"), manifest.dir)
+        val exitCode = if (onDiagnostic == null) {
+            JavaProcess.run(jvmArgs, target.resolve("$argFileName.jvm.args"), manifest.dir)
+        } else {
+            val (code, output) = JavaProcess.capture(jvmArgs, target.resolve("$argFileName.jvm.args"), manifest.dir)
+            val (diagnostics, rest) = CompilerMessages.parse(output, moduleName)
+            diagnostics.forEach { System.err.println(it.render()); onDiagnostic(it) }
+            if (rest.isNotEmpty()) System.err.println(rest)
+            code
+        }
         if (exitCode != 0) throw SkiffException("could not compile `$moduleName` due to the errors above")
     }
 
