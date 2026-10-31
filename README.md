@@ -117,6 +117,10 @@ once and the IDE can see (and navigate into) the generated code.
 | `skf vscode` | Generate `workspace.json` for the Kotlin by JetBrains VS Code extension (source roots, jars and JDK; git-ignored; compiler plugins and `jvm-target` are not passed on) |
 | `skf idea` | Generate IntelliJ IDEA project files: sources, libraries, Kotlin language level, compiler plugins and generated sources (git-ignored; once generated, `add`, `remove`, `install`, `update` and any build that re-resolves refresh them) |
 | `skf clean` | Delete `target/` |
+| `skf self-update [--check]` | Replace the running skiff jar with the latest GitHub release's fat jar (sha256-verified); `--check` only reports. On Windows the swap happens right after the command exits. Needs write access to the install directory, so it fails for the read-only Flatpak (update that with `flatpak`) and may need an elevated shell for the MSI/pkg installs. |
+
+After a successful command skiff prints a one-line hint when a newer release exists, checking GitHub at most once a day
+(only at a terminal; set `SKIFF_NO_UPDATE_CHECK` to turn it off, `CI` and `--offline` also skip it).
 
 Global flags: `--locked` (fail if `Skiff.lock` would change, for CI), `--offline` (local cache only).
 
@@ -140,10 +144,20 @@ workflow run. Pushing a tag `vX.Y.Z` (it must match the version in `Skiff.toml`)
 | Platform | Package | Notes |
 |---|---|---|
 | Windows | `skf-X.Y.Z.msi` | Bundles its own JDK runtime. Installs to `Program Files\skf` and adds that folder to the system `PATH`; open a new terminal to use `skf`. |
-| macOS | `skf-X.Y.Z-arm64.pkg`, `skf-X.Y.Z-x64.pkg` | Unsigned, so Gatekeeper asks for confirmation (right-click, Open). Installs `skf.app` to `/Applications` and links `skf` into `/usr/local/bin`. |
+| macOS | `skf-X.Y.Z-arm64.pkg`, `skf-X.Y.Z-x64.pkg` | Signed and notarized when the release was built with the signing secrets (see below); otherwise Gatekeeper blocks it: use System Settings → Privacy & Security → Open Anyway, or `xattr -d com.apple.quarantine <file>`. Installs `skf.app` to `/Applications` and links `skf` into `/usr/local/bin`. |
 | Linux | `skiff-X.Y.Z.flatpak` (x86_64) | `flatpak install skiff-X.Y.Z.flatpak`, then `flatpak run io.github.jjones028.Skiff`. It can read your home directory and use the network. |
 
 The Windows and macOS packages come from `packaging/jpackage.sh` (jlink + jpackage); the Flatpak from
 `packaging/flatpak/`. macOS packages are versioned 1.x.y while skiff is below 1.0, because macOS rejects a major version of 0.
+
+To sign and notarize the macOS pkg, add these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `MACOS_CERTIFICATES_P12` | Base64 of one `.p12` export holding both the *Developer ID Application* and *Developer ID Installer* identities (`base64 -i certs.p12 \| pbcopy`) |
+| `MACOS_CERTIFICATES_PASSWORD` | The password chosen when exporting the `.p12` |
+| `APPLE_ID` | Apple ID email of the developer account |
+| `APPLE_APP_PASSWORD` | An app-specific password for it (appleid.apple.com → Sign-In and Security) |
+| `APPLE_TEAM_ID` | The 10-character team ID |
 
 Downloads are cached in `~/.skiff` (override with `SKIFF_HOME`).

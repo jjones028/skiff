@@ -19,6 +19,8 @@ import skiff.project.Manifest
 import skiff.project.ManifestEditor
 import skiff.project.ProjectTemplate
 import skiff.project.VsCodeProject
+import skiff.update.SelfUpdate
+import skiff.update.UpdateNotice
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -29,9 +31,10 @@ class Cli {
     private var locked = false
     private var fat = false
     private var git = true
+    private var check = false
 
     fun run(args: List<String>): Int = try {
-        dispatch(args)
+        dispatch(args).also { if (it == 0) announceUpdate(args) }
     } catch (e: SkiffException) {
         Term.error(e.message ?: "failed")
         1
@@ -50,6 +53,7 @@ class Cli {
                 "--locked" -> locked = true
                 "--fat" -> fat = true
                 "--no-git" -> git = false
+                "--check" -> check = true
                 "-h", "--help" -> return help()
                 "-V", "--version" -> return version()
                 else -> throw SkiffException("unknown option '$flag'\n\nRun `skf help` for usage.")
@@ -72,10 +76,19 @@ class Cli {
             "tree" -> tree()
             "classpath" -> classpath()
             "clean" -> clean()
+            "self-update" -> SelfUpdate().run(checkOnly = check)
             "help" -> help()
             "version" -> version()
             else -> throw SkiffException("no such command: `$command`\n\nRun `skf help` for a list of commands.")
         }
+    }
+
+    /** Hints at a newer release after a command, at most daily, only for people at a terminal (`SKIFF_NO_UPDATE_CHECK` opts out). */
+    private fun announceUpdate(args: List<String>) {
+        val command = args.firstOrNull { !it.startsWith("-") }
+        if (offline || !Term.interactive || System.getenv("SKIFF_NO_UPDATE_CHECK") != null || System.getenv("CI") != null) return
+        if (command == null || command in setOf("self-update", "run", "r", "help", "version")) return
+        UpdateNotice().message()?.let { Term.status("Note", it) }
     }
 
     private fun newProject(params: List<String>): Int {
@@ -300,12 +313,14 @@ class Cli {
                 clean              Delete the target directory
                 idea               Generate IntelliJ IDEA project files (module + libraries)
                 vscode             Generate workspace.json for the Kotlin by JetBrains VS Code extension
+                self-update        Replace skiff with the latest release (--check only looks)
 
             Options:
                 --locked           Fail if Skiff.lock would change (for CI)
                 --offline          Use only the local cache
                 --fat              With build: also bundle dependencies into target/<name>-<version>-all.jar
                 --no-git           With new/init: do not create a git repository
+                --check            With self-update: only report whether a newer release exists
                 -h, --help         Show this help
                 -V, --version      Show the version
             """.trimIndent(),

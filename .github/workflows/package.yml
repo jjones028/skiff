@@ -1,9 +1,11 @@
 name: Package
 
 # Runs after a successful Build of a pull request into main or of a version tag and turns that build's fat jar into installers.
-# A tag also publishes them as a GitHub release.
+# A tag also publishes them, plus the fat jar and its sha256 (what `skf self-update` fetches), as a GitHub release.
 # Run manually (Actions tab or `gh workflow run Package --ref <branch>`), it builds the fat jar of the chosen ref itself
 # and uploads the installers as artifacts, without publishing a release.
+# The macOS pkg is signed and notarized when the MACOS_CERTIFICATES_P12, MACOS_CERTIFICATES_PASSWORD, APPLE_ID,
+# APPLE_APP_PASSWORD and APPLE_TEAM_ID secrets exist (see README).
 on:
   workflow_run:
     workflows: [Build]
@@ -106,7 +108,43 @@ jobs:
           path: dist-in
           run-id: ${{ github.event.workflow_run.id || github.run_id }}
           github-token: ${{ github.token }}
+      # Signing and notarizing need repository secrets; without them (forks) the pkg is built unsigned.
+      - name: Import signing certificates
+        id: signing
+        env:
+          CERTIFICATES_P12: ${{ secrets.MACOS_CERTIFICATES_P12 }}
+          CERTIFICATES_PASSWORD: ${{ secrets.MACOS_CERTIFICATES_PASSWORD }}
+        run: |
+          if [ -z "$CERTIFICATES_P12" ]; then echo "signed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(uuidgen)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$CERTIFICATES_P12" | base64 --decode > "$RUNNER_TEMP/certificates.p12"
+          security import "$RUNNER_TEMP/certificates.p12" -k "$keychain" -P "$CERTIFICATES_PASSWORD" -A -t cert -f pkcs12
+          rm "$RUNNER_TEMP/certificates.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity() { security find-identity -v "$keychain" | grep "$1" | head -1 | sed 's/.*"\(.*\)".*/\1/'; }
+          echo "app=$(identity 'Developer ID Application')" >> "$GITHUB_OUTPUT"
+          echo "installer=$(identity 'Developer ID Installer')" >> "$GITHUB_OUTPUT"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
       - run: packaging/jpackage.sh pkg dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
+        env:
+          SKF_MAC_APP_IDENTITY: ${{ steps.signing.outputs.app }}
+          SKF_MAC_INSTALLER_IDENTITY: ${{ steps.signing.outputs.installer }}
+      - name: Notarize
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for f in dist/*.pkg; do
+            xcrun notarytool submit "$f" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            xcrun stapler staple "$f"
+          done
       - run: for f in dist/*.pkg; do mv "$f" "${f%.pkg}-${{ matrix.arch }}.pkg"; done
       - uses: actions/upload-artifact@v4
         with:
@@ -146,12 +184,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: installer-*
           path: installers
           merge-multiple: true
+      # The fat jar and its checksum are what `skf self-update` downloads.
+      - uses: actions/download-artifact@v4
+        with:
+          name: skiff-jar
+          path: installers
+          run-id: ${{ github.event.workflow_run.id || github.run_id }}
+          github-token: ${{ github.token }}
+      - run: cd installers && sha256sum skiff-*-all.jar > "$(echo skiff-*-all.jar).sha256"
       - run: gh release create "$TAG" installers/* --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
