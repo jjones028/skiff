@@ -2,7 +2,10 @@ package skiff.cli
 
 /** Cargo-style status output on stderr, coloured when stderr is a terminal. */
 object Term {
-    private val color: Boolean = System.getenv("NO_COLOR") == null && isTerminal()
+    /** True when stderr is a terminal (and so a person is watching). */
+    val interactive: Boolean = isTerminal()
+
+    private val color: Boolean = System.getenv("NO_COLOR") == null && interactive
 
     fun status(verb: String, message: String) {
         System.err.println(paint(verb.padStart(12), "1;32") + " " + message)
