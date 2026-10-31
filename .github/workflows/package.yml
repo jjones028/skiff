@@ -1,7 +1,7 @@
 name: Package
 
 # Runs after a successful Build of a pull request into main or of a version tag and turns that build's fat jar into installers.
-# A tag also publishes them, plus the fat jar and its sha256 (what `skf self-update` fetches), as a GitHub release.
+# A tag also publishes them, plus the fat jar and its sha256 (what `skf upgrade` fetches), as a GitHub release.
 # Run manually (Actions tab or `gh workflow run Package --ref <branch>`), it builds the fat jar of the chosen ref itself
 # and uploads the installers as artifacts, without publishing a release.
 # The macOS pkg is signed and notarized when the MACOS_CERTIFICATES_P12, MACOS_CERTIFICATES_PASSWORD, APPLE_ID,
@@ -115,7 +115,7 @@ jobs:
           CERTIFICATES_P12: ${{ secrets.MACOS_CERTIFICATES_P12 }}
           CERTIFICATES_PASSWORD: ${{ secrets.MACOS_CERTIFICATES_PASSWORD }}
         run: |
-          if [ -z "$CERTIFICATES_P12" ]; then echo "signed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ -z "$CERTIFICATES_P12" ]; then exit 0; fi
           keychain="$RUNNER_TEMP/signing.keychain-db"
           password=$(uuidgen)
           security create-keychain -p "$password" "$keychain"
@@ -127,8 +127,14 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           identity() { security find-identity -v "$keychain" | grep "$1" | head -1 | sed 's/.*"\(.*\)".*/\1/'; }
-          echo "app=$(identity 'Developer ID Application')" >> "$GITHUB_OUTPUT"
-          echo "installer=$(identity 'Developer ID Installer')" >> "$GITHUB_OUTPUT"
+          app=$(identity 'Developer ID Application')
+          installer=$(identity 'Developer ID Installer')
+          if [ -z "$app" ] || [ -z "$installer" ]; then
+            echo "::warning::The certificates have no Developer ID Application and Installer identities; building an unsigned pkg"
+            exit 0
+          fi
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
           echo "signed=true" >> "$GITHUB_OUTPUT"
       - run: packaging/jpackage.sh pkg dist-in/skiff-${{ needs.version.outputs.version }}-all.jar ${{ needs.version.outputs.version }} dist
         env:
@@ -141,6 +147,10 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::warning::APPLE_ID, APPLE_APP_PASSWORD or APPLE_TEAM_ID is missing; leaving the signed pkg un-notarized"
+            exit 0
+          fi
           for f in dist/*.pkg; do
             xcrun notarytool submit "$f" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
             xcrun stapler staple "$f"
@@ -191,7 +201,7 @@ jobs:
           pattern: installer-*
           path: installers
           merge-multiple: true
-      # The fat jar and its checksum are what `skf self-update` downloads.
+      # The fat jar and its checksum are what `skf upgrade` downloads.
       - uses: actions/download-artifact@v4
         with:
           name: skiff-jar
