@@ -31,14 +31,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          fetch-tags: true
       - id: version
         env:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
         run: |
           version=$(grep -m1 '^version' Skiff.toml | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [ -n "$HEAD_BRANCH" ] && git show-ref --verify --quiet "refs/tags/$HEAD_BRANCH"; then
+          # Build only runs for pushes of v* tags, so a pushed head_branch starting with v is a tag. (The checkout is
+          # of the commit alone, so the tag ref itself is not available to look up.)
+          if [ "$RUN_EVENT" = push ] && [ "${HEAD_BRANCH#v}" != "$HEAD_BRANCH" ]; then
             if [ "$HEAD_BRANCH" != "v$version" ]; then
               echo "tag $HEAD_BRANCH does not match Skiff.toml version $version" >&2
               exit 1
