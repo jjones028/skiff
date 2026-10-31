@@ -1,6 +1,6 @@
 name: Package
 
-# Runs after a successful Build of main or of a version tag and turns that build's fat jar into installers.
+# Runs after a successful Build of a pull request into main or of a version tag and turns that build's fat jar into installers.
 # A tag also publishes them as a GitHub release.
 # Run manually (Actions tab or `gh workflow run Package --ref <branch>`), it builds the fat jar of the chosen ref itself
 # and uploads the installers as artifacts, without publishing a release.
@@ -19,8 +19,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v')))
+      ((github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].base.ref == 'main') ||
+      (github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v'))))
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
