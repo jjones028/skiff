@@ -20,7 +20,7 @@ simple projects. User-facing docs are in README.md; this file records design dec
 
 ```powershell
 ./bootstrap.ps1                       # builds bin/skiff.jar from scratch
-bin/skf.cmd build --fat               # self-host build -> target/skiff-0.1.0-all.jar
+bin/skf.cmd build --fat               # self-host build -> target/skiff-0.1.1-all.jar
 ```
 
 Unit tests live in `test/` (mirroring the `src/skiff` packages) and run with `bin/skf.cmd test` (the unit tests take about a second; the whole suite about 40 s because of the CLI tests).

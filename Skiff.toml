@@ -1,9 +1,9 @@
-# Skiff builds itself: `skf build --fat` produces target/skiff-0.1.0-all.jar.
+# Skiff builds itself: `skf build --fat` produces target/skiff-0.1.1-all.jar.
 # The first build has to come from bootstrap.ps1 / bootstrap.sh.
 
 [package]
 name = "skiff"
-version = "0.1.0"
+version = "0.1.1"
 main = "skiff.MainKt"
 
 [kotlin]
