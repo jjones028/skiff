@@ -21,7 +21,7 @@ class UpdateNotice(
     fun message(current: String = BuildInfo.VERSION): String? = try {
         val latest = latestVersion()
         if (latest != null && SelfUpdate.isNewer(latest, current)) {
-            "skiff v$latest is available (installed: v$current); run `skf self-update`"
+            "skiff v$latest is available (installed: v$current); run `skf upgrade`"
         } else {
             null
         }
