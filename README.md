@@ -17,6 +17,7 @@ hello/
 ├── Skiff.toml      # manifest (you edit this)
 ├── Skiff.lock      # exact versions + sha256 of every jar (generated, commit it)
 ├── src/            # Kotlin sources, any package structure
+├── test/           # Kotlin tests, run by `skf test`
 ├── resources/      # optional, copied into the jar
 └── target/         # build output (git-ignored)
 ```
@@ -103,7 +104,7 @@ once and the IDE can see (and navigate into) the generated code.
 
 | Command | What it does |
 |---|---|
-| `skf new <name>` / `skf init` | Create a project (new directory / current directory) and `git init` it unless it is already inside a repository or `--no-git` is given |
+| `skf new <name>` / `skf init` | Create a project with a sample test (new directory / current directory) and `git init` it unless it is already inside a repository or `--no-git` is given |
 | `skf add <group:artifact[@version]>...` | Add dependencies (latest stable if no version) and install |
 | `skf remove <group:artifact>...` | Remove dependencies |
 | `skf install` | Resolve, update `Skiff.lock` if the manifest changed, download jars |
