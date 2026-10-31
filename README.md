@@ -117,7 +117,7 @@ once and the IDE can see (and navigate into) the generated code.
 | `skf vscode` | Generate `workspace.json` for the Kotlin by JetBrains VS Code extension (source roots, jars and JDK; git-ignored; compiler plugins and `jvm-target` are not passed on) |
 | `skf idea` | Generate IntelliJ IDEA project files: sources, libraries, Kotlin language level, compiler plugins and generated sources (git-ignored; once generated, `add`, `remove`, `install`, `update` and any build that re-resolves refresh them) |
 | `skf clean` | Delete `target/` |
-| `skf self-update [--check]` | Replace the running skiff jar with the latest GitHub release's fat jar (sha256-verified); `--check` only reports. On Windows the swap happens right after the command exits. Needs write access to the install directory, so it fails for the read-only Flatpak (update that with `flatpak`) and may need an elevated shell for the MSI/pkg installs. |
+| `skf upgrade [--check]` | Replace the running skiff jar with the latest GitHub release's fat jar (sha256-verified); `--check` only reports. On Windows the swap happens right after the command exits. Needs write access to the install directory, so it fails for the read-only Flatpak (update that with `flatpak`) and may need an elevated shell for the MSI/pkg installs. |
 
 After a successful command skiff prints a one-line hint when a newer release exists, checking GitHub at most once a day
 (only at a terminal; set `SKIFF_NO_UPDATE_CHECK` to turn it off, `CI` and `--offline` also skip it).

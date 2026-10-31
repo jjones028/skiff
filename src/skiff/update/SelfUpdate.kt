@@ -9,7 +9,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
-/** `skf self-update`: replaces the jar skiff is running from with the latest release's fat jar. */
+/** `skf upgrade`: replaces the jar skiff is running from with the latest release's fat jar. */
 class SelfUpdate(private val releases: Releases = Releases()) {
     fun run(checkOnly: Boolean): Int {
         val release = releases.latest()
@@ -18,7 +18,7 @@ class SelfUpdate(private val releases: Releases = Releases()) {
             return 0
         }
         if (checkOnly) {
-            Term.status("Available", "skiff v${release.version} (installed: v${BuildInfo.VERSION}); run `skf self-update`")
+            Term.status("Available", "skiff v${release.version} (installed: v${BuildInfo.VERSION}); run `skf upgrade`")
             return 0
         }
         val jar = currentJar()

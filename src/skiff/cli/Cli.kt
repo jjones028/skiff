@@ -76,7 +76,7 @@ class Cli {
             "tree" -> tree()
             "classpath" -> classpath()
             "clean" -> clean()
-            "self-update" -> SelfUpdate().run(checkOnly = check)
+            "upgrade" -> SelfUpdate().run(checkOnly = check)
             "help" -> help()
             "version" -> version()
             else -> throw SkiffException("no such command: `$command`\n\nRun `skf help` for a list of commands.")
@@ -87,7 +87,7 @@ class Cli {
     private fun announceUpdate(args: List<String>) {
         val command = args.firstOrNull { !it.startsWith("-") }
         if (offline || !Term.interactive || System.getenv("SKIFF_NO_UPDATE_CHECK") != null || System.getenv("CI") != null) return
-        if (command == null || command in setOf("self-update", "run", "r", "help", "version")) return
+        if (command == null || command in setOf("upgrade", "run", "r", "help", "version")) return
         UpdateNotice().message()?.let { Term.status("Note", it) }
     }
 
@@ -313,14 +313,14 @@ class Cli {
                 clean              Delete the target directory
                 idea               Generate IntelliJ IDEA project files (module + libraries)
                 vscode             Generate workspace.json for the Kotlin by JetBrains VS Code extension
-                self-update        Replace skiff with the latest release (--check only looks)
+                upgrade            Replace skiff with the latest release (--check only looks)
 
             Options:
                 --locked           Fail if Skiff.lock would change (for CI)
                 --offline          Use only the local cache
                 --fat              With build: also bundle dependencies into target/<name>-<version>-all.jar
                 --no-git           With new/init: do not create a git repository
-                --check            With self-update: only report whether a newer release exists
+                --check            With upgrade: only report whether a newer release exists
                 -h, --help         Show this help
                 -V, --version      Show the version
             """.trimIndent(),
