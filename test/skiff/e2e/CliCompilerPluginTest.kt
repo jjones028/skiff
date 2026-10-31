@@ -71,7 +71,7 @@ class CliCompilerPluginTest {
         assertTrue("name=\"languageVersion\" arg=\"2.4\"" in module, module)
 
         // Tests are compiled with the same plugins.
-        Files.createDirectories(project.resolve("test"))
+        Files.delete(project.resolve("test/MainTest.kt")) // the sample test needs the template's Main.kt
         Files.writeString(
             project.resolve("test/UserTest.kt"),
             """

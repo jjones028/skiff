@@ -42,6 +42,7 @@ class CliProjectLifecycleTest {
         assertTrue("Compiling" in first.stderr && "Finished" in first.stderr, first.stderr)
         assertTrue("Running `app a b`" in first.stderr, first.stderr)
         assertTrue("Fresh" in app.succeed("run").stderr)
+        assertTrue(Files.isRegularFile(project.resolve("test/MainTest.kt")), "skf new writes a sample test")
         assertTrue(Files.isRegularFile(project.resolve("Skiff.lock")))
         assertTrue(Files.isRegularFile(project.resolve("target/app-0.1.0.jar")))
 

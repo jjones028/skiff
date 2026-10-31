@@ -22,12 +22,30 @@ object ProjectTemplate {
 
             """.trimIndent(),
         )
-        if (Files.list(dir.resolve("src")).use { it.findAny().isEmpty }) {
+        // The sample test exercises the sample source, so both are written only into an empty project.
+        val test = dir.resolve("test")
+        if (isEmpty(dir.resolve("src")) && isEmpty(test)) {
             writeIfAbsent(
                 dir.resolve("src").resolve("Main.kt"),
                 """
+                fun greeting() = "Hello, world!"
+
                 fun main() {
-                    println("Hello, world!")
+                    println(greeting())
+                }
+
+                """.trimIndent(),
+            )
+            Files.createDirectories(test)
+            writeIfAbsent(
+                test.resolve("MainTest.kt"),
+                """
+                import kotlin.test.Test
+                import kotlin.test.assertEquals
+
+                class MainTest {
+                    @Test
+                    fun greets() = assertEquals("Hello, world!", greeting())
                 }
 
                 """.trimIndent(),
@@ -35,6 +53,8 @@ object ProjectTemplate {
         }
         writeIfAbsent(dir.resolve(".gitignore"), "/target\n/.idea\n*.iml\n/workspace.json\n/.vscode\n")
     }
+
+    private fun isEmpty(dir: Path): Boolean = !Files.exists(dir) || Files.list(dir).use { it.findAny().isEmpty }
 
     private fun writeIfAbsent(file: Path, content: String) {
         if (!Files.exists(file)) Files.writeString(file, content)
