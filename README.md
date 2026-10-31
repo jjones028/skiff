@@ -134,7 +134,7 @@ Requires JDK 25+.
 ```
 
 This writes `bin/skiff.jar`. Put `bin/` on your `PATH` and use `skf` (`skf.cmd` on Windows).
-Once bootstrapped, skiff builds itself: `skf build --fat`, then copy `target/skiff-0.1.0-all.jar` to `bin/skiff.jar`.
+Once bootstrapped, skiff builds itself: `skf build --fat`, then copy `target/skiff-0.1.1-all.jar` to `bin/skiff.jar`.
 
 ### Installer packages
 
