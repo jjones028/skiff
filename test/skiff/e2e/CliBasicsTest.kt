@@ -27,7 +27,7 @@ class CliBasicsTest {
     @Test
     fun helpListsTheCommands() {
         val result = skf.succeed("help")
-        for (command in listOf("new", "init", "add", "remove", "install", "update", "build", "run", "test", "tree", "classpath", "clean", "idea", "upgrade")) {
+        for (command in listOf("new", "init", "add", "remove", "install", "update", "build", "run", "test", "tree", "classpath", "clean", "idea", "metadata", "upgrade")) {
             assertTrue(Regex("^\\s+$command\\b", RegexOption.MULTILINE).containsMatchIn(result.stdout), "help should list `$command`")
         }
         assertEquals(result.stdout, skf.succeed().stdout, "no arguments shows the help")

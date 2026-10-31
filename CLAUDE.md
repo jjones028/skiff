@@ -96,6 +96,7 @@ network access to fill `~/.skiff` (compiler, gson, JUnit). It shares one project
   roots with `generated="true"` and are created up front so the IDE picks them up. The format was checked by feeding
   the generated `<configuration>` to IntelliJ's own `FacetSerializationKt.deserializeFacetSettings` (from the
   installed Kotlin plugin); `IdeaProjectFacetTest` checks it structurally.
+- **Metadata** (`ProjectMetadata`, `skf metadata`): the stable, versioned JSON description of a project (`format-version`, kebab-case keys, absolute forward-slash paths, additive changes only). It is the contract for an IntelliJ plugin (External System import) and other tools, so they never parse `Skiff.toml`/`Skiff.lock`; new project facts belong here too. Not yet included: source jars. Compiler diagnostics are the other half: `skf build --message-format=json` (`Builder.onDiagnostic`) runs the compiler child with `-Dorg.jetbrains.kotlin.cliMessageRenderer=XML` and `CompilerMessages` turns that into JSON lines on stdout (`compiler-message`, then `build-finished`). Only `build`, only kotlinc passes (kapt too; KSP and the javac pass for generated Java still print plainly), no end positions.
 - **Editor sync**: `Cli.syncEditors` regenerates the IDEA module and `workspace.json` after `add`/`remove`/`install`/`update`
   (and after `build`/`run`/`test` when the lockfile changed), but only for files that already exist, so projects that
   never ran `skf idea`/`skf vscode` get nothing written. Any new command that changes the manifest or lock should call it.

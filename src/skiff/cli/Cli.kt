@@ -2,11 +2,13 @@ package skiff.cli
 
 import skiff.BuildInfo
 import skiff.SkiffException
+import skiff.build.BuildResult
 import skiff.build.Builder
 import skiff.build.Processors
 import skiff.build.Runner
 import skiff.build.TestRunner
 import skiff.build.Toolchain
+import skiff.json.JsonWriter
 import skiff.maven.ArtifactStore
 import skiff.maven.MavenMetadata
 import skiff.maven.ModuleId
@@ -17,6 +19,7 @@ import skiff.project.Installer
 import skiff.project.Lockfile
 import skiff.project.Manifest
 import skiff.project.ManifestEditor
+import skiff.project.ProjectMetadata
 import skiff.project.ProjectTemplate
 import skiff.project.VsCodeProject
 import skiff.update.SelfUpdate
@@ -32,6 +35,7 @@ class Cli {
     private var fat = false
     private var git = true
     private var check = false
+    private var jsonMessages = false
 
     fun run(args: List<String>): Int = try {
         dispatch(args).also { if (it == 0) announceUpdate(args) }
@@ -54,6 +58,7 @@ class Cli {
                 "--fat" -> fat = true
                 "--no-git" -> git = false
                 "--check" -> check = true
+                "--message-format=json" -> jsonMessages = true
                 "-h", "--help" -> return help()
                 "-V", "--version" -> return version()
                 else -> throw SkiffException("unknown option '$flag'\n\nRun `skf help` for usage.")
@@ -61,6 +66,7 @@ class Cli {
         }
         val command = words.firstOrNull() ?: return help()
         val params = words.drop(1)
+        if (jsonMessages && command !in setOf("build", "b")) throw SkiffException("--message-format=json is only supported by `skf build`")
         return when (command) {
             "new" -> newProject(params)
             "init" -> init()
@@ -68,11 +74,12 @@ class Cli {
             "remove", "rm" -> remove(params)
             "install", "i" -> install(update = false)
             "update" -> install(update = true)
-            "build", "b" -> build()
+            "build", "b" -> if (jsonMessages) buildWithJsonMessages() else build()
             "run", "r" -> runProject(params + passthrough)
             "test", "t" -> test(passthrough)
             "idea" -> idea()
             "vscode" -> vscode()
+            "metadata" -> metadata()
             "tree" -> tree()
             "classpath" -> classpath()
             "clean" -> clean()
@@ -87,7 +94,7 @@ class Cli {
     private fun announceUpdate(args: List<String>) {
         val command = args.firstOrNull { !it.startsWith("-") }
         if (offline || !Term.interactive || System.getenv("SKIFF_NO_UPDATE_CHECK") != null || System.getenv("CI") != null) return
-        if (command == null || command in setOf("upgrade", "run", "r", "help", "version")) return
+        if (command == null || command in setOf("upgrade", "run", "r", "help", "version", "metadata")) return
         UpdateNotice().message()?.let { Term.status("Note", it) }
     }
 
@@ -169,6 +176,36 @@ class Cli {
         return 0
     }
 
+    /**
+     * `skf build --message-format=json`: one JSON object per line on stdout (`compiler-message` for each diagnostic, then
+     * `build-finished`), for IDEs and other tools. Status lines and readable diagnostics stay on stderr.
+     */
+    private fun buildWithJsonMessages(): Int {
+        fun emit(event: Map<String, Any?>) {
+            println(JsonWriter.writeCompact(event))
+            System.out.flush()
+        }
+        val manifest = project()
+        var result: BuildResult? = null
+        try {
+            val store = store(manifest)
+            val installer = Installer(manifest, store)
+            val classpath = installAndSync(manifest, store, installer)
+            val builder = Builder(manifest, Toolchain(store)) { emit(it.toJson()) }
+            result = builder.build(classpath, fatJar = fat, pluginClasspath = installer.pluginClasspath(locked), processors = processors(installer))
+            return 0
+        } finally {
+            emit(
+                linkedMapOf(
+                    "reason" to "build-finished",
+                    "success" to (result != null),
+                    "classes" to result?.classesDir?.toString()?.replace('\\', '/'),
+                    "jar" to result?.jar?.toString()?.replace('\\', '/'),
+                ),
+            )
+        }
+    }
+
     private fun runProject(args: List<String>): Int {
         val manifest = project()
         val store = store(manifest)
@@ -210,6 +247,23 @@ class Cli {
         val file = generateVsCode(manifest, Installer(manifest, store))
         Term.status("Generated", manifest.dir.relativize(file).toString())
         Term.status("Note", "for the Kotlin by JetBrains extension (reload the window to pick it up); this file is machine-specific, do not commit it")
+        return 0
+    }
+
+    /** Prints the project as JSON on stdout for tools; progress and warnings stay on stderr. */
+    private fun metadata(): Int {
+        val manifest = project()
+        val store = store(manifest)
+        val installer = Installer(manifest, store)
+        val (lock, jars) = installer.lockedJars(locked)
+        val pluginJars = Toolchain(store).pluginJars(manifest.kotlinVersion, manifest.plugins.map { it.plugin }) +
+            installer.pluginClasspath(locked)
+        val metadata = ProjectMetadata.build(
+            manifest, lock, jars, pluginJars,
+            kaptClasspath = installer.isolatedClasspath(Manifest.KAPT, locked),
+            kspClasspath = installer.isolatedClasspath(Manifest.KSP, locked),
+        )
+        print(JsonWriter.write(metadata))
         return 0
     }
 
@@ -313,6 +367,7 @@ class Cli {
                 clean              Delete the target directory
                 idea               Generate IntelliJ IDEA project files (module + libraries)
                 vscode             Generate workspace.json for the Kotlin by JetBrains VS Code extension
+                metadata           Print the project (roots, dependencies, Kotlin settings) as JSON, for tools
                 upgrade            Replace skiff with the latest release (--check only looks)
 
             Options:
@@ -320,6 +375,7 @@ class Cli {
                 --offline          Use only the local cache
                 --fat              With build: also bundle dependencies into target/<name>-<version>-all.jar
                 --no-git           With new/init: do not create a git repository
+                --message-format=json  With build: print compiler diagnostics and the result as JSON lines on stdout
                 --check            With upgrade: only report whether a newer release exists
                 -h, --help         Show this help
                 -V, --version      Show the version

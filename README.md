@@ -109,13 +109,14 @@ once and the IDE can see (and navigate into) the generated code.
 | `skf remove <group:artifact>...` | Remove dependencies |
 | `skf install` | Resolve, update `Skiff.lock` if the manifest changed, download jars |
 | `skf update` | Re-resolve even if the lockfile is current |
-| `skf build [--fat]` | Compile to `target/<name>-<version>.jar` (`--fat`: `-all.jar` with dependencies) |
+| `skf build [--fat] [--message-format=json]` | Compile to `target/<name>-<version>.jar` (`--fat`: `-all.jar` with dependencies). With `--message-format=json`, stdout carries one JSON object per line for tools: a `compiler-message` per diagnostic (`severity`, `path`, `line`, `column`, `message`; the compiler reports only the start position) and a final `build-finished` with `success`, `classes` and `jar`. Status lines and readable diagnostics stay on stderr |
 | `skf run [-- args]` | Build and run |
 | `skf test [-- args]` | Compile `test/` and run it with JUnit 5 (kotlin-test is included; args go to the JUnit console launcher) |
 | `skf tree` | Dependency tree |
 | `skf classpath` | Print the dependency classpath (for IDEs/scripts) |
 | `skf vscode` | Generate `workspace.json` for the Kotlin by JetBrains VS Code extension (source roots, jars and JDK; git-ignored; compiler plugins and `jvm-target` are not passed on) |
 | `skf idea` | Generate IntelliJ IDEA project files: sources, libraries, Kotlin language level, compiler plugins and generated sources (git-ignored; once generated, `add`, `remove`, `install`, `update` and any build that re-resolves refresh them) |
+| `skf metadata` | Print the project as JSON on stdout (package, Kotlin settings, JDK, source roots, output paths, every locked dependency with its jar, scope and direct flag, kapt/KSP classpaths), like `cargo metadata`; keys are only ever added within `format-version` 1. Meant for IDE plugins and scripts; it resolves and downloads like `skf install`, with progress on stderr |
 | `skf clean` | Delete `target/` |
 | `skf upgrade [--check]` | Replace the running skiff jar with the latest GitHub release's fat jar (sha256-verified); `--check` only reports. On Windows the swap happens right after the command exits. Needs write access to the install directory, so it fails for the read-only Flatpak (update that with `flatpak`) and may need an elevated shell for the MSI/pkg installs. |
 

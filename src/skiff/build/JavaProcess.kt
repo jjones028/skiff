@@ -24,6 +24,17 @@ object JavaProcess {
         return process.waitFor()
     }
 
+    /** Like [run], but returns what the process printed (stdout and stderr together) instead of passing it through. */
+    fun capture(args: List<String>, argFile: Path, workDir: Path): Pair<Int, String> {
+        writeArgFile(argFile, args)
+        val process = ProcessBuilder(executable.toString(), "@$argFile")
+            .directory(workDir.toFile())
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.readAllBytes().toString(Charsets.UTF_8)
+        return process.waitFor() to output
+    }
+
     /** Writes one quoted argument per line, in the format both `java` and `kotlinc` accept. */
     fun writeArgFile(file: Path, args: List<String>) {
         Files.createDirectories(file.parent)
